@@ -90,10 +90,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           active_provider_label: isLocalEngine
             ? 'Local ComfyUI (SD 1.5 + ControlNet Canny)'
             : hasRep
-            ? 'Replicate SDXL ControlNet (lucataco/sdxl-controlnet)'
-            : isDemo
-            ? 'Demo Simulation Mode (Offline Procedural)'
-            : 'Secondary AI Provider',
+              ? 'Replicate SDXL ControlNet (lucataco/sdxl-controlnet)'
+              : isDemo
+                ? 'Demo Simulation Mode (Offline Procedural)'
+                : 'Secondary AI Provider',
         });
       }
       setTimeout(() => {
@@ -136,11 +136,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         <form onSubmit={handleSave} className="p-6 space-y-5 overflow-y-auto">
           {/* Active Mode Notice */}
           <div
-            className={`p-3.5 rounded-lg border text-xs leading-relaxed ${
-              config?.is_demo_mode
+            className={`p-3.5 rounded-lg border text-xs leading-relaxed ${config?.is_demo_mode
                 ? 'bg-amber-50/70 border-amber-200 text-amber-900'
                 : 'bg-emerald-50/70 border-emerald-200 text-emerald-900'
-            }`}
+              }`}
           >
             <div className="flex items-start gap-2">
               {config?.is_demo_mode ? (
@@ -156,8 +155,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   {config?.is_demo_mode
                     ? 'Currently in offline mode. Choose Local ComfyUI below, or add a cloud API token.'
                     : provider === 'comfyui' || provider === 'local'
-                    ? 'Images are generated on this computer. Keep ComfyUI Desktop open. The first image is slower while the models load.'
-                    : 'System is connected to a cloud GPU provider for ControlNet architectural diffusion.'}
+                      ? 'Images are generated on this computer. Keep ComfyUI Desktop open. The first image is slower while the models load.'
+                      : 'System is connected to a cloud GPU provider for ControlNet architectural diffusion.'}
                 </p>
               </div>
             </div>
@@ -174,11 +173,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               className="w-full text-xs font-medium px-3 py-2 bg-canvas-50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-arch-cyan"
             >
               <option value="comfyui">Local ComfyUI (Free: Stable Diffusion 1.5 + ControlNet Canny)</option>
-              <option value="replicate">Replicate Cloud GPU (Primary: lucataco/sdxl-controlnet)</option>
-              <option value="auto">Auto-Select (Use Replicate if token present)</option>
+
+
               <option value="demo">Demo Simulation Mode (Explicit offline procedural testing)</option>
-              <option value="huggingface">Hugging Face Inference API (Secondary)</option>
-              <option value="fal">Fal.ai Fast SDXL (Secondary)</option>
+
+
             </select>
             {(provider === 'comfyui' || provider === 'local') && (
               <div className="mt-2 flex items-center gap-2">
@@ -210,7 +209,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </div>
 
           {/* Replicate Token Input (PRIMARY) */}
-          <div className="space-y-1.5 bg-blue-50/50 p-3.5 rounded-lg border border-blue-200">
+          <div className="hidden space-y-1.5 bg-blue-50/50 p-3.5 rounded-lg border border-blue-200">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
                 <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-navy-900 text-cyan-300">
@@ -296,11 +295,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* Test Result Message */}
           {testResult && (
             <div
-              className={`p-3 rounded-lg text-xs flex items-start gap-2 border ${
-                testResult.valid
+              className={`p-3 rounded-lg text-xs flex items-start gap-2 border ${testResult.valid
                   ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
                   : 'bg-rose-50 text-rose-800 border-rose-200'
-              }`}
+                }`}
             >
               {testResult.valid ? (
                 <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
@@ -317,11 +315,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* Save Feedback */}
           {feedback && (
             <div
-              className={`p-2.5 rounded-lg text-xs flex items-center gap-1.5 ${
-                feedback.type === 'success'
+              className={`p-2.5 rounded-lg text-xs flex items-center gap-1.5 ${feedback.type === 'success'
                   ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
                   : 'bg-rose-50 text-rose-800 border border-rose-200'
-              }`}
+                }`}
             >
               <CheckCircle2 className="w-4 h-4 text-emerald-600" />
               <span>{feedback.message}</span>

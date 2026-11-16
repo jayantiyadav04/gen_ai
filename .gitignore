@@ -50,3 +50,4 @@ backend/.env
 backend_backup/
 frontend.zip
 *.tmp
+*.bak
