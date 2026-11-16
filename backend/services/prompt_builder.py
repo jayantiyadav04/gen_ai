@@ -161,15 +161,16 @@ PROFILE_BY_PROVIDER = {
 }
 
 PROFILE_LABELS = {
-    "sd15": "Stable Diffusion 1.5 + ControlNet (short tag prompt, ~52 words)",
+    "sd15": "Stable Diffusion 1.5 + ControlNet (photo-first prompt, ~52 words)",
     "sdxl": "SDXL + ControlNet (descriptive prompt, ~70 words)",
     "sdxl_img2img": "SDXL image-to-image (photo-first prompt, ~70 words)",
     "demo": "Demo engine (prompt is not read by a model)",
 }
 
 PROFILE_RULES = {
-    "sd15": {"max_words": 52, "tail": "realistic, sharp focus, high detail",
-             "subject": "architectural visualization of a {bldg}", "natural": False},
+    "sd15": {"max_words": 52,
+             "tail": "photorealistic architectural photograph, realistic materials, sharp focus, high detail, 35mm lens",
+             "subject": "professional architectural photograph of a {bldg}", "natural": False},
     "sdxl": {"max_words": 70,
              "tail": "photorealistic architectural photograph, professional lighting, sharp focus, high detail, 8k",
              "subject": "professional architectural photograph of a {bldg}", "natural": True},

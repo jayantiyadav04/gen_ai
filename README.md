@@ -142,7 +142,9 @@ CampusVision AI supports several engines. Pick one in **Settings** (top-right pi
 3. Open Settings, choose **Local ComfyUI**, and press **Check ComfyUI connection**.
 4. Generate. A render takes about 1-3 minutes on a 16 GB MacBook; the first run is slower.
 
-Local renders are concept-quality (up to 768 px). The prompt builder keeps prompts short because Stable Diffusion 1.5 only reads about 75 tokens.
+Local renders use the same graph as the matching ComfyUI Desktop workflow: the original sketch is center-cropped to 768×512, passed through ComfyUI Canny (0.4 / 0.8), then sampled with 25 Euler / normal steps, CFG 7, and the selected ControlNet strength. The Studio starts with seed 12345 for repeatable comparison; set the seed to -1 to randomize. You can paste the exact positive prompt into **Manual Override** and edit the negative prompt in Advanced Controls.
+
+The prompt builder now uses photo-first wording for local SD 1.5. The project still shows the OpenCV edge preview, while the local ComfyUI render uses the matching Canny node directly on the original sketch.
 
 **Cloud providers (optional):** enter a Hugging Face or Replicate token in Settings and select that engine.
 

@@ -165,7 +165,7 @@ export const AdvancedControls: React.FC<AdvancedControlsProps> = ({
               </div>
               {isLocal && (
                 <p className="text-[10px] text-slate-500">
-                  Local mode keeps your sketch's shape and renders at up to 768 px to suit a laptop.
+                  Local mode matches Desktop: center-crop to 768×512, Canny 0.4/0.8, 25 Euler steps.
                 </p>
               )}
             </div>
@@ -192,7 +192,7 @@ export const AdvancedControls: React.FC<AdvancedControlsProps> = ({
                 className="w-full text-xs font-mono px-3 py-1.5 bg-canvas-50 border border-slate-200 rounded text-slate-800"
               />
               <p className="text-[10px] text-slate-500">
-                Fix seed to generate repeatable variations with slight prompt modifications.
+                12345 matches the current ComfyUI Desktop workflow; use -1 to randomize.
               </p>
             </div>
           </div>

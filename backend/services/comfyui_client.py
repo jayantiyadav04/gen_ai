@@ -1,16 +1,16 @@
 """
 Local ComfyUI provider for CampusVision AI.
 
-Pipeline: the backend's OpenCV edge map is uploaded to ComfyUI, a Stable Diffusion 1.5
-+ ControlNet Canny workflow is submitted through ComfyUI's HTTP API, the job is polled
-until it finishes, and the generated image is downloaded and saved locally.
+The local workflow mirrors the matching ComfyUI Desktop graph: upload the original sketch,
+resize/crop to 768x512, run ComfyUI's Canny node (0.4/0.8), then sample with SD 1.5 and
+ControlNet Canny.
 """
 import asyncio
 import logging
 import random
 import uuid
 from io import BytesIO
-from typing import Any, Dict, Tuple
+from typing import Any, Dict
 
 import httpx
 from fastapi import HTTPException
@@ -24,17 +24,7 @@ SAVE_NODE_ID = "12"
 
 
 class ComfyUIClient:
-    # ------------------------------------------------------------------ helpers
-    @staticmethod
-    def pick_size(edge_path: str, max_side: int = 768) -> Tuple[int, int]:
-        """SD 1.5 friendly size (multiples of 8, long side <= max_side) matching the edge map's aspect ratio."""
-        with Image.open(edge_path) as im:
-            w, h = im.size
-        scale = max_side / float(max(w, h))
-        new_w = max(256, int(round(w * scale / 8)) * 8)
-        new_h = max(256, int(round(h * scale / 8)) * 8)
-        return new_w, new_h
-
+    # ---------------------------------------------------------------- workflow
     @staticmethod
     def build_workflow(
         image_name: str,
@@ -47,17 +37,19 @@ class ComfyUIClient:
         height: int,
         steps: int = 25,
     ) -> Dict[str, Any]:
-        """API-format workflow: SD 1.5 + ControlNet Canny, driven by an existing edge map (no Canny node needed)."""
+        """API-format equivalent of the user's SD 1.5 + Canny ControlNet Desktop workflow."""
         return {
             "1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": settings.comfyui_checkpoint}},
             "2": {"class_type": "LoadImage", "inputs": {"image": image_name}},
             "3": {"class_type": "ImageScale", "inputs": {
                 "image": ["2", 0], "upscale_method": "lanczos", "width": width, "height": height, "crop": "center"}},
+            "4": {"class_type": "Canny", "inputs": {
+                "image": ["3", 0], "low_threshold": 0.4, "high_threshold": 0.8}},
             "5": {"class_type": "ControlNetLoader", "inputs": {"control_net_name": settings.comfyui_controlnet}},
             "6": {"class_type": "CLIPTextEncode", "inputs": {"clip": ["1", 1], "text": prompt}},
             "7": {"class_type": "CLIPTextEncode", "inputs": {"clip": ["1", 1], "text": negative_prompt}},
             "8": {"class_type": "ControlNetApplyAdvanced", "inputs": {
-                "positive": ["6", 0], "negative": ["7", 0], "control_net": ["5", 0], "image": ["3", 0],
+                "positive": ["6", 0], "negative": ["7", 0], "control_net": ["5", 0], "image": ["4", 0],
                 "vae": ["1", 2], "strength": float(controlnet_strength), "start_percent": 0.0, "end_percent": 1.0}},
             "9": {"class_type": "EmptyLatentImage", "inputs": {"width": width, "height": height, "batch_size": 1}},
             "10": {"class_type": "KSampler", "inputs": {
@@ -84,7 +76,7 @@ class ComfyUIClient:
     # ---------------------------------------------------------------- generate
     @staticmethod
     async def generate(
-        edge_path: str,
+        sketch_path: str,
         prompt: str,
         negative_prompt: str,
         controlnet_strength: float,
@@ -95,7 +87,8 @@ class ComfyUIClient:
         base = settings.comfyui_url.rstrip("/")
         timeout_s = settings.comfyui_timeout
         used_seed = seed if seed and seed > 0 else random.randint(1, 2**31 - 1)
-        width, height = ComfyUIClient.pick_size(edge_path)
+        # Match the active ComfyUI Desktop graph's 768x512 Canvas Size node.
+        width, height = 768, 512
 
         status = await ComfyUIClient.check_status()
         if not status["reachable"]:
@@ -106,9 +99,17 @@ class ComfyUIClient:
             )
 
         async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=10.0)) as client:
-            # 1. upload the edge map
-            upload_name = f"cv_{uuid.uuid4().hex[:10]}_edge.png"
-            with open(edge_path, "rb") as f:
+            # 1. Upload the original sketch. ComfyUI performs the same resize and Canny
+            # preprocessing as the Desktop graph, instead of receiving the site's separate
+            # OpenCV edge map.
+            upload_name = f"cv_{uuid.uuid4().hex[:10]}_sketch.png"
+            image_buffer = BytesIO()
+            with Image.open(sketch_path) as sketch:
+                sketch.convert("RGB").save(image_buffer, format="PNG")
+            image_bytes = image_buffer.getvalue()
+            if not image_bytes:
+                raise HTTPException(status_code=400, detail="Could not encode the uploaded sketch for ComfyUI.")
+            with BytesIO(image_bytes) as f:
                 up = await client.post(
                     f"{base}/upload/image",
                     files={"image": (upload_name, f.read(), "image/png")},

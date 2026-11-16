@@ -37,7 +37,8 @@ export const Studio: React.FC<StudioProps> = ({ config, onOpenSettings, preset }
   const [controlnetStrength, setControlnetStrength] = useState(preset?.controlnetStrength ?? 0.7);
   const [denoisingStrength, setDenoisingStrength] = useState(preset?.denoisingStrength ?? 0.75);
   const [guidanceScale, setGuidanceScale] = useState(preset?.guidanceScale ?? 7.0);
-  const [seed, setSeed] = useState(-1);
+  // Match the active ComfyUI Desktop workflow's initial seed. Users can still choose -1 to randomize.
+  const [seed, setSeed] = useState(12345);
   const [resolution, setResolution] = useState('1024x768');
   // Negative prompt follows the compiled one (style- and model-specific) until the user edits it
   const [negativePrompt, setNegativePrompt] = useState('');
@@ -83,7 +84,7 @@ export const Studio: React.FC<StudioProps> = ({ config, onOpenSettings, preset }
     setNegativeEdited(false);
     setManualPrompt(null);
     setProjectTitle(ex.title);
-    setSeed(-1);
+    setSeed(12345);
     loadSketchFromUrl(ex.sketch_url);
   };
 

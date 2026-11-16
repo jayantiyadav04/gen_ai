@@ -241,10 +241,14 @@ class ArchitecturalGenerator:
         local_aspect = None
         structure_lost = False
 
+        # Local ComfyUI now conditions on the original sketch and runs its own Canny node.
+        # Cloud providers continue to use the precomputed edge map.
+        cache_input_path = sketch_path if target_provider in ["comfyui", "local"] else edge_path
+
         # Check deterministic generation cache (for fixed seeds > 0)
         cache_key = None
-        if seed > 0 and os.path.exists(edge_path):
-            with open(edge_path, "rb") as ef:
+        if seed > 0 and os.path.exists(cache_input_path):
+            with open(cache_input_path, "rb") as ef:
                 edge_bytes = ef.read()
             cache_key = CampusVisionCache.hash_generation(
                 edge_bytes=edge_bytes,
@@ -256,7 +260,7 @@ class ArchitecturalGenerator:
                 resolution=resolution,
                 model_version=(
                     f"{target_provider}:{settings.replicate_version}" if target_provider == "replicate"
-                    else f"{target_provider}:{settings.comfyui_checkpoint}:{settings.comfyui_controlnet}" if target_provider in ["comfyui", "local"]
+                    else f"{target_provider}:{settings.comfyui_checkpoint}:{settings.comfyui_controlnet}:desktop-canny-0.4-0.8-768x512-v2" if target_provider in ["comfyui", "local"]
                     else f"{target_provider}:denoise{denoising_strength:.2f}"
                 )
             )
@@ -372,7 +376,7 @@ class ArchitecturalGenerator:
         elif target_provider in ["comfyui", "local"]:
             logger.info("Executing live ControlNet generation via local ComfyUI (SD 1.5 + ControlNet Canny)...")
             comfy = await ComfyUIClient.generate(
-                edge_path=edge_path,
+                sketch_path=sketch_path,
                 prompt=compiled_prompt,
                 negative_prompt=effective_negative_prompt,
                 controlnet_strength=controlnet_strength,
