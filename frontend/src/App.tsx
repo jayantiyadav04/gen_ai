@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ViewTab, AppConfig, ExampleCase, ArchitecturalProject } from './types';
+import { ViewTab, AppConfig, ExampleCase, ArchitecturalProject, StudioPreset } from './types';
 import { getConfig } from './api/client';
 import { Navbar } from './components/Navbar';
 import { Footer } from './components/Footer';
@@ -17,12 +17,9 @@ export const App: React.FC = () => {
   const [isArchitectureOpen, setIsArchitectureOpen] = useState(false);
 
   // Studio preset state when navigating from examples or projects
-  const [studioPreset, setStudioPreset] = useState<{
-    sketchUrl?: string;
-    title?: string;
-    style?: string;
-    category?: string;
-  } | null>(null);
+  const [studioPreset, setStudioPreset] = useState<StudioPreset | null>(null);
+  // Changing the key remounts the Studio so a new preset always applies
+  const [studioKey, setStudioKey] = useState(0);
 
   useEffect(() => {
     getConfig()
@@ -30,27 +27,40 @@ export const App: React.FC = () => {
       .catch((err) => console.error('Config fetch failed:', err));
   }, []);
 
-  const handleLoadExampleToStudio = (example: ExampleCase) => {
-    setStudioPreset({
-      sketchUrl: example.sketch_url,
-      title: example.title,
-      style: example.style,
-      category: example.category,
-    });
+  const openStudioWith = (preset: StudioPreset | null) => {
+    setStudioPreset(preset);
+    setStudioKey((k) => k + 1);
     setCurrentTab('studio');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleOpenProjectInStudio = (project: ArchitecturalProject) => {
-    setStudioPreset({
+  const handleLoadExampleToStudio = (example: ExampleCase) =>
+    openStudioWith({
+      sketchUrl: example.sketch_url,
+      title: example.title,
+      style: example.style,
+      category: example.category,
+      lighting: example.lighting,
+      materials: example.materials,
+      userPrompt: example.user_prompt,
+      controlnetStrength: example.controlnet_strength,
+      denoisingStrength: example.denoising_strength,
+      guidanceScale: example.guidance_scale,
+    });
+
+  const handleOpenProjectInStudio = (project: ArchitecturalProject) =>
+    openStudioWith({
       sketchUrl: project.sketch_url,
       title: project.title,
       style: project.style,
       category: project.building_type,
+      lighting: project.lighting,
+      materials: project.materials,
+      userPrompt: project.user_prompt,
+      controlnetStrength: project.controlnet_strength,
+      denoisingStrength: project.denoising_strength,
+      guidanceScale: project.guidance_scale,
     });
-    setCurrentTab('studio');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
 
   return (
     <div className="min-h-screen flex flex-col bg-canvas-50 text-slate-900 font-sans selection:bg-cyan-100 selection:text-cyan-900">
@@ -83,12 +93,10 @@ export const App: React.FC = () => {
 
         {currentTab === 'studio' && (
           <Studio
+            key={studioKey}
             config={config}
             onOpenSettings={() => setIsSettingsOpen(true)}
-            initialSketchUrl={studioPreset?.sketchUrl}
-            initialTitle={studioPreset?.title}
-            initialStyle={studioPreset?.style}
-            initialCategory={studioPreset?.category}
+            preset={studioPreset}
           />
         )}
 
@@ -99,11 +107,7 @@ export const App: React.FC = () => {
         {currentTab === 'projects' && (
           <ProjectsGallery
             onOpenProjectInStudio={handleOpenProjectInStudio}
-            onGoToStudio={() => {
-              setStudioPreset(null);
-              setCurrentTab('studio');
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
+            onGoToStudio={() => openStudioWith(null)}
           />
         )}
       </main>

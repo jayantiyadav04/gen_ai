@@ -38,7 +38,7 @@ The application implements a genuine 5-phase image-to-image Generative AI pipeli
                        ▼
 ┌──────────────────────────────────────────────┐
 │          Photorealistic Campus Render        │
-│  (Ray-traced glass, lighting & landscaping)  │
+│  (Photorealistic render from the selected engine)  │
 └──────────────────────┬───────────────────────┘
                        │
                        ▼
@@ -150,6 +150,25 @@ Local renders are concept-quality (up to 768 px). The prompt builder keeps promp
 
 ---
 
+### 6a. Prompts are written per model
+
+The prompt compiler (`backend/services/prompt_builder.py`) builds a different prompt for each engine:
+
+| Engine | Profile | Prompt style |
+|---|---|---|
+| Local ComfyUI | `sd15` | Short comma-separated tags, about 50 words (CLIP only reads ~75 tokens) |
+| Replicate / Hugging Face | `sdxl` | Richer descriptive phrases, about 70 words, photograph-style tail, extra negatives |
+| Fal.ai | `sdxl_img2img` | Photo-first wording and strong "not a drawing" negatives, because the raw sketch is the init image |
+| Demo | `demo` | Shown for reference only |
+
+Command-style wording such as "Convert this sketch into..." is removed automatically: diffusion models do not follow instructions. The negative prompt follows the selected style (a Neo-Classical building no longer forbids columns). Editing the compiled prompt by hand (Manual Override) is sent to the generator; changing any option rebuilds it.
+
+### 6b. Preloaded sketches
+
+Clicking a preloaded benchmark sketch in the Studio loads its style, building type, lighting, materials, description and tuned ControlNet/CFG values, runs the OpenCV edge pipeline on it, and rebuilds the prompt for the active engine.
+
+---
+
 ## 7. Key Features
 
 - **Architectural Typologies**: University Academic Block, School Building, Central Library, Grand Auditorium, Research Laboratory, Sports Complex, Student Hostel, Campus Masterplan.
@@ -160,5 +179,12 @@ Local renders are concept-quality (up to 768 px). The prompt builder keeps promp
   - Side-by-side comparative inspection
   - Structural Edge Overlay mode (superimposes OpenCV Canny lines over the render in blueprint cyan)
   - Fullscreen zoom and pan modal
-- **Curated Case Studies**: 6 pre-loaded architectural benchmark transformations ready to explore and load into the Studio with one click.
+- **Curated Case Studies**: 6 pre-loaded benchmark sketches that configure the Studio with one click. The example "renders" in the gallery are procedural illustrations, not AI output; generate with a real engine for photorealistic results.
+
+## 8. Tests
+
+```
+./venv/bin/python backend/test_suite.py                  # 9 end-to-end API tests
+./venv/bin/python backend/test_prompts_and_samples.py    # per-model prompts, preloaded-sample flow, overrides
+```
 

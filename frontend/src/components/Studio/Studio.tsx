@@ -1,83 +1,90 @@
-import React, { useState } from 'react';
-import { PreprocessResult, GenerationResult, ArchitecturalProject, AppConfig } from '../../types';
+import React, { useState, useEffect } from 'react';
+import { PreprocessResult, GenerationResult, ArchitecturalProject, AppConfig, ExampleCase, StudioPreset } from '../../types';
 import { SketchUploader } from './SketchUploader';
 import { PromptBuilderPanel } from './PromptBuilderPanel';
 import { AdvancedControls } from './AdvancedControls';
 import { GenerationProgress } from './GenerationProgress';
 import { isLocalProvider } from '../../utils/provider';
 import { ResultsView } from '../Results/ResultsView';
-import { generateRender } from '../../api/client';
+import { generateRender, preprocessSketchUrl } from '../../api/client';
 import { Sparkles, AlertCircle, RefreshCw } from 'lucide-react';
 
 interface StudioProps {
   config: AppConfig | null;
   onOpenSettings: () => void;
-  initialSketchUrl?: string;
-  initialTitle?: string;
-  initialStyle?: string;
-  initialCategory?: string;
+  preset?: StudioPreset | null;
 }
 
-export const Studio: React.FC<StudioProps> = ({
-  config,
-  onOpenSettings,
-  initialSketchUrl,
-  initialTitle,
-  initialStyle,
-  initialCategory,
-}) => {
-  // Sketch state
-  const [currentSketch, setCurrentSketch] = useState<PreprocessResult | null>(
-    initialSketchUrl
-      ? {
-          sketch_id: 'sample_initial',
-          filename: 'initial_sketch.png',
-          sketch_url: initialSketchUrl,
-          edge_url: initialSketchUrl.replace('_sketch', '_edge'),
-          blueprint_url: initialSketchUrl,
-          width: 1024,
-          height: 768,
-          edge_density: 0.08,
-        }
-      : null
-  );
+const DEFAULT_MATERIALS = 'Structural glass curtain walls, fair-faced concrete, timber accents';
+const DEFAULT_PROMPT =
+  'modern university academic block, glass windows, landscaped entrance, fair-faced concrete textures';
+
+export const Studio: React.FC<StudioProps> = ({ config, onOpenSettings, preset }) => {
+  // Sketch state (real edge map comes from the backend, never guessed URLs)
+  const [currentSketch, setCurrentSketch] = useState<PreprocessResult | null>(null);
+  const [isLoadingSketch, setIsLoadingSketch] = useState(false);
+  const [sketchError, setSketchError] = useState<string | null>(null);
+  const [projectTitle, setProjectTitle] = useState<string | undefined>(preset?.title);
 
   // Architecture parameters
-  const [style, setStyle] = useState(initialStyle || 'Modern Minimalist');
-  const [buildingType, setBuildingType] = useState(initialCategory || 'University Building');
-  const [lighting, setLighting] = useState('Morning');
-  const [materials, setMaterials] = useState(
-    'Structural glass curtain walls, fair-faced concrete, timber accents'
-  );
-  const [userPrompt, setUserPrompt] = useState(
-    'Modern university academic block with glass windows, landscaped entrance, fair-faced concrete textures and morning sunlight.'
-  );
+  const [style, setStyle] = useState(preset?.style || 'Modern Minimalist');
+  const [buildingType, setBuildingType] = useState(preset?.category || 'University Building');
+  const [lighting, setLighting] = useState(preset?.lighting || 'Morning');
+  const [materials, setMaterials] = useState(preset?.materials || DEFAULT_MATERIALS);
+  const [userPrompt, setUserPrompt] = useState(preset?.userPrompt || DEFAULT_PROMPT);
 
   // Advanced parameters
-  const [controlnetStrength, setControlnetStrength] = useState(0.7);
-  const [denoisingStrength, setDenoisingStrength] = useState(0.75);
-  const [guidanceScale, setGuidanceScale] = useState(7.0);
+  const [controlnetStrength, setControlnetStrength] = useState(preset?.controlnetStrength ?? 0.7);
+  const [denoisingStrength, setDenoisingStrength] = useState(preset?.denoisingStrength ?? 0.75);
+  const [guidanceScale, setGuidanceScale] = useState(preset?.guidanceScale ?? 7.0);
   const [seed, setSeed] = useState(-1);
   const [resolution, setResolution] = useState('1024x768');
-  const [negativePrompt, setNegativePrompt] = useState(config?.default_negative_prompt || '');
+  // Negative prompt follows the compiled one (style- and model-specific) until the user edits it
+  const [negativePrompt, setNegativePrompt] = useState('');
+  const [negativeEdited, setNegativeEdited] = useState(false);
+  // Manual override of the compiled prompt (null = use the automatic prompt)
+  const [manualPrompt, setManualPrompt] = useState<string | null>(null);
 
   // Generation execution state
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [activeProject, setActiveProject] = useState<ArchitecturalProject | null>(null);
 
-  // Handle sample selection from quick-picker
-  const handleSelectSample = (url: string, title: string) => {
-    setCurrentSketch({
-      sketch_id: `sample_${Date.now()}`,
-      filename: `${title}_sketch.png`,
-      sketch_url: url,
-      edge_url: url.replace('_sketch', '_edge'),
-      blueprint_url: url,
-      width: 1024,
-      height: 768,
-      edge_density: 0.08,
-    });
+  const loadSketchFromUrl = async (url: string) => {
+    setIsLoadingSketch(true);
+    setSketchError(null);
+    try {
+      setCurrentSketch(await preprocessSketchUrl(url));
+    } catch (err: any) {
+      setCurrentSketch(null);
+      setSketchError(err.message || 'Could not load the sketch.');
+    } finally {
+      setIsLoadingSketch(false);
+    }
+  };
+
+  // A sketch handed over from Examples / Projects is processed once when the Studio opens
+  useEffect(() => {
+    if (preset?.sketchUrl) loadSketchFromUrl(preset.sketchUrl);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Picking a preloaded sketch configures the WHOLE studio for it: style, building type, lighting,
+  // materials, description and tuned strengths. The compiled prompt then rebuilds automatically.
+  const handleSelectExample = (ex: ExampleCase) => {
+    setStyle(ex.style);
+    setBuildingType(ex.category);
+    setLighting(ex.lighting);
+    setMaterials(ex.materials);
+    setUserPrompt(ex.user_prompt);
+    setControlnetStrength(ex.controlnet_strength);
+    setDenoisingStrength(ex.denoising_strength);
+    setGuidanceScale(ex.guidance_scale);
+    setNegativeEdited(false);
+    setManualPrompt(null);
+    setProjectTitle(ex.title);
+    setSeed(-1);
+    loadSketchFromUrl(ex.sketch_url);
   };
 
   const handleGenerate = async (providerOverride?: string) => {
@@ -98,9 +105,10 @@ export const Studio: React.FC<StudioProps> = ({
         guidance_scale: guidanceScale,
         seed,
         resolution,
-        negative_prompt: negativePrompt,
+        negative_prompt: negativeEdited ? negativePrompt : undefined,
+        compiled_prompt: manualPrompt ?? undefined,
         provider: providerOverride,
-        title: `${buildingType} — ${style}`,
+        title: projectTitle || `${buildingType} — ${style}`,
       });
 
       setActiveProject(res.project);
@@ -149,10 +157,15 @@ export const Studio: React.FC<StudioProps> = ({
           {/* 1. Sketch Uploader */}
           <SketchUploader
             currentSketch={currentSketch}
-            onSketchProcessed={(res) => setCurrentSketch(res)}
+            onSketchProcessed={(res) => { setCurrentSketch(res); setSketchError(null); setProjectTitle(undefined); }}
             onClearSketch={() => setCurrentSketch(null)}
-            onSelectSampleSketch={handleSelectSample}
+            onSelectExample={handleSelectExample}
+            selectedSketchUrl={currentSketch?.sketch_url}
           />
+          {isLoadingSketch && (
+            <p className="text-xs text-slate-500 font-mono">Preparing sketch and edge map…</p>
+          )}
+          {sketchError && <p className="text-xs text-rose-700">{sketchError}</p>}
 
           {/* 2. Architectural Conditioning & Style Panel */}
           <PromptBuilderPanel
@@ -166,8 +179,10 @@ export const Studio: React.FC<StudioProps> = ({
             onMaterialsChange={setMaterials}
             userPrompt={userPrompt}
             onUserPromptChange={setUserPrompt}
-            onCompiledPromptReady={(compiled, neg) => {
-              if (neg && !negativePrompt) setNegativePrompt(neg);
+            provider={config?.default_provider}
+            onCompiledPromptReady={(compiled, neg, manual) => {
+              setManualPrompt(manual ? compiled : null);
+              if (neg && !negativeEdited) setNegativePrompt(neg);
             }}
           />
 
@@ -185,7 +200,7 @@ export const Studio: React.FC<StudioProps> = ({
             resolution={resolution}
             onResolutionChange={setResolution}
             negativePrompt={negativePrompt}
-            onNegativePromptChange={setNegativePrompt}
+            onNegativePromptChange={(v) => { setNegativePrompt(v); setNegativeEdited(true); }}
           />
 
           {/* Generation Progress Indicator */}

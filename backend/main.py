@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import time
 import logging
@@ -23,7 +24,8 @@ from backend.database import (
 )
 from backend.services.image_processor import ImageProcessor
 from backend.services.prompt_builder import (
-    PromptBuilder, ARCHITECTURAL_STYLES, BUILDING_TYPES, LIGHTING_CONDITIONS, DEFAULT_NEGATIVE_PROMPT
+    PromptBuilder, ARCHITECTURAL_STYLES, BUILDING_TYPES, LIGHTING_CONDITIONS, DEFAULT_NEGATIVE_PROMPT,
+    profile_for_provider
 )
 from backend.services.generator import ArchitecturalGenerator
 from backend.services.comfyui_client import ComfyUIClient
@@ -87,7 +89,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize database and sample assets on startup
+# Initialize database and sample assets on startup.
+# init_db() is idempotent and also runs at import time, so tools that build the app without
+# running startup events (e.g. a bare TestClient) still get their tables.
+init_db()
+
 @app.on_event("startup")
 def on_startup():
     logger.info("Initializing CampusVision AI database...")
@@ -112,6 +118,10 @@ class BuildPromptRequest(BaseModel):
     building_type: str = "University Building"
     lighting: str = "Morning"
     materials: str = "Structural glass, fair-faced concrete, timber accents"
+    provider: Optional[str] = None   # engine the prompt is written for (defaults to the saved engine)
+
+class PreprocessUrlRequest(BaseModel):
+    sketch_url: str
 
 class GenerateRequest(BaseModel):
     sketch_id: Optional[str] = None
@@ -127,6 +137,7 @@ class GenerateRequest(BaseModel):
     seed: int = -1
     resolution: str = "1024x768"
     negative_prompt: Optional[str] = None
+    compiled_prompt: Optional[str] = None   # manual prompt override from the Studio
     provider: Optional[str] = None
     title: Optional[str] = None
 
@@ -189,6 +200,7 @@ def get_config():
         "has_fal_key": has_fal,
         "is_demo_mode": is_demo,
         "active_provider_label": active_label,
+        "prompt_profile": profile_for_provider("replicate" if (provider == "auto" and has_replicate) else provider),
         "primary_model": settings.replicate_model,
         "primary_version": settings.replicate_version,
         "styles": list(ARCHITECTURAL_STYLES.keys()),
@@ -218,15 +230,48 @@ async def comfyui_status():
 async def test_provider_endpoint(req: TestProviderRequest):
     return await ArchitecturalGenerator.test_provider_credentials(req.provider, req.api_key)
 
+def _active_provider_name() -> str:
+    settings.reload()
+    return (get_setting("DEFAULT_PROVIDER") or settings.default_provider or "comfyui").lower().strip()
+
 @app.post("/api/build-prompt")
 def build_prompt_endpoint(req: BuildPromptRequest):
+    provider = (req.provider or _active_provider_name()).lower().strip()
+    if provider == "auto":
+        provider = "replicate" if (get_setting("REPLICATE_API_TOKEN") or settings.replicate_api_token) else (
+            "huggingface" if (get_setting("HUGGINGFACE_API_KEY") or settings.huggingface_api_key) else "comfyui")
     return PromptBuilder.build_prompt(
         user_prompt=req.user_prompt,
         style=req.style,
         building_type=req.building_type,
         lighting=req.lighting,
-        materials=req.materials
+        materials=req.materials,
+        profile=profile_for_provider(provider)
     )
+
+@app.post("/api/preprocess-url")
+def preprocess_url_endpoint(req: PreprocessUrlRequest):
+    """Runs the OpenCV edge pipeline on a bundled/uploaded sketch (e.g. a preloaded sample) so the
+    Studio gets a real edge map, blueprint and valid sketch_id instead of guessed URLs."""
+    path = resolve_public_file(req.sketch_url)
+    if not path:
+        raise HTTPException(status_code=404, detail="Sketch not found on the server.")
+    stem = re.sub(r"[^A-Za-z0-9_-]", "_", path.stem)
+    res = ImageProcessor.process_sketch(str(path), f"sample_{stem}")
+    return {
+        "status": "success",
+        "sketch_id": f"sample_{stem}",
+        "filename": path.name,
+        "sketch_url": to_public_url(str(path)),
+        "edge_url": res["edge_url"],
+        "blueprint_url": res["blueprint_url"],
+        "width": res["width"],
+        "height": res["height"],
+        "aspect_ratio": res.get("aspect_ratio"),
+        "aspect_label": res.get("aspect_label"),
+        "edge_density": res["edge_density"],
+        "cache_hit": res.get("cache_hit", False),
+    }
 
 @app.post("/api/preprocess-sketch")
 async def preprocess_sketch_endpoint(file: UploadFile = File(...)):
@@ -257,7 +302,7 @@ async def generate_render_endpoint(req: GenerateRequest):
     sketch_path = None
     edge_path = None
 
-    if req.sketch_id:
+    if req.sketch_id and re.fullmatch(r"[A-Za-z0-9_-]{1,64}", req.sketch_id):
         # Check in uploads
         for f in UPLOAD_DIR.glob(f"{req.sketch_id}_sketch*"):
             sketch_path = str(f)
@@ -311,7 +356,8 @@ async def generate_render_endpoint(req: GenerateRequest):
         seed=req.seed,
         resolution=req.resolution,
         negative_prompt_override=req.negative_prompt,
-        provider_override=req.provider
+        provider_override=req.provider,
+        compiled_prompt_override=req.compiled_prompt
     )
 
     # 3. Determine public sketch & edge URLs

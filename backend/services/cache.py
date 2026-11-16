@@ -8,6 +8,9 @@ from typing import Dict, Any, Optional, Tuple
 
 logger = logging.getLogger("campusvision.cache")
 
+# Bump whenever the preprocessing algorithm changes, otherwise old edge maps are served from cache.
+PREPROC_VERSION = "v3-gradient-canny"
+
 class CampusVisionCache:
     """
     High-performance deterministic caching system for CampusVision AI.
@@ -56,7 +59,7 @@ class CampusVisionCache:
     @staticmethod
     def hash_preproc(image_bytes: bytes, low_threshold: Optional[int], high_threshold: Optional[int], aspect_ratio_bucket: str) -> str:
         h = hashlib.sha256(image_bytes)
-        h.update(f":{low_threshold}:{high_threshold}:{aspect_ratio_bucket}".encode("utf-8"))
+        h.update(f":{low_threshold}:{high_threshold}:{aspect_ratio_bucket}:{PREPROC_VERSION}".encode("utf-8"))
         return f"preproc_{h.hexdigest()}"
 
     @staticmethod

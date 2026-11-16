@@ -15,7 +15,7 @@ def run_all_tests():
     print("  CAMPUSVISION AI — VERIFICATION TEST SUITE")
     print("==================================================")
     
-    client = TestClient(app)
+    client = TestClient(app)  # DB tables are created at import time, so no startup event is needed
     
     # 1. Health check
     print("\n[1/9] Testing GET /api/health ...")

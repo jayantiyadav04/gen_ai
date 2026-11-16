@@ -53,18 +53,34 @@ export async function preprocessSketch(file: File): Promise<PreprocessResult> {
   return res.json();
 }
 
+export async function preprocessSketchUrl(sketchUrl: string): Promise<PreprocessResult> {
+  const res = await fetch(`${API_BASE}/preprocess-url`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sketch_url: sketchUrl }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to load sketch' }));
+    throw new Error(err.detail || 'Failed to load sketch');
+  }
+  return res.json();
+}
+
 export async function buildPrompt(params: {
   user_prompt: string;
   style: string;
   building_type: string;
   lighting: string;
   materials: string;
+  provider?: string;
 }): Promise<{
   compiled_prompt: string;
   negative_prompt: string;
   style_summary: string;
   building_summary: string;
   lighting_summary: string;
+  prompt_profile?: string;
+  prompt_profile_label?: string;
 }> {
   const res = await fetch(`${API_BASE}/build-prompt`, {
     method: 'POST',

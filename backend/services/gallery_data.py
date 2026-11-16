@@ -1,5 +1,6 @@
 import os
 import math
+import zlib
 import random
 from pathlib import Path
 from typing import Dict, Any, List, Tuple
@@ -17,7 +18,7 @@ EXAMPLES = [
         "style": "Modern Minimalist",
         "lighting": "Morning",
         "materials": "Low-iron structural glass curtain walls, fair-faced white concrete, slender steel fins",
-        "user_prompt": "Convert rough elevation sketch into a modern university academic block with continuous ribbon glass, landscaped sunken courtyard, fair-faced concrete louvers, and crisp morning sunlight.",
+        "user_prompt": "modern university academic block, continuous ribbon glass windows, landscaped sunken courtyard, fair-faced concrete louvers",
         "sketch_file": "academic_block_sketch.png",
         "render_file": "academic_block_render.png",
         "controlnet_strength": 0.85,
@@ -33,7 +34,7 @@ EXAMPLES = [
         "style": "Contemporary",
         "lighting": "Golden Hour",
         "materials": "Acoustic curtain glazing, Accoya vertical timber louvers, dark anthracite zinc fascia",
-        "user_prompt": "Transform hand-drawn library elevation into a contemporary knowledge commons with double-height reading atrium, warm wooden fins and golden hour ambient light.",
+        "user_prompt": "contemporary university library, double-height glazed reading atrium, warm wooden fins, students on the plaza",
         "sketch_file": "central_library_sketch.png",
         "render_file": "central_library_render.png",
         "controlnet_strength": 0.82,
@@ -49,7 +50,7 @@ EXAMPLES = [
         "style": "Sustainable / Green Architecture",
         "lighting": "Bright Daylight",
         "materials": "Cross-laminated mass timber (CLT), vertical hydroponic living walls, photovoltaic glass canopy",
-        "user_prompt": "Sustainable green campus research laboratory with multi-tier vertical garden facades, solar canopy, cleanroom glazing and pedestrian bioswales.",
+        "user_prompt": "sustainable research laboratory, multi-tier vertical garden facades, solar canopy, large glazed lab wings, planted bioswales",
         "sketch_file": "biotech_hub_sketch.png",
         "render_file": "biotech_hub_render.png",
         "controlnet_strength": 0.88,
@@ -65,7 +66,7 @@ EXAMPLES = [
         "style": "Futuristic Parametric",
         "lighting": "Evening",
         "materials": "Tessellated champagne titanium panels, curved structural glass foyer, warm LED interior illumination",
-        "user_prompt": "Dramatic university auditorium with fluid curving roofline, glowing entrance foyer, dusk blue hour sky and illuminated campus walkways.",
+        "user_prompt": "university auditorium with fluid curving roofline, glowing entrance foyer, illuminated campus walkways",
         "sketch_file": "auditorium_sketch.png",
         "render_file": "auditorium_render.png",
         "controlnet_strength": 0.85,
@@ -81,7 +82,7 @@ EXAMPLES = [
         "style": "Traditional Indian Heritage",
         "lighting": "Sunset",
         "materials": "Chisel-dressed Agra red sandstone, hand-carved Dholpur buff stone, geometric jali sunscreens",
-        "user_prompt": "Convert elevation sketch to traditional Indian heritage university building with intricate sandstone jali sunscreens, shaded colonnades and sunset reflections.",
+        "user_prompt": "heritage university building, carved sandstone jali screens, shaded colonnades, arched veranda, central courtyard",
         "sketch_file": "heritage_hall_sketch.png",
         "render_file": "heritage_hall_render.png",
         "controlnet_strength": 0.80,
@@ -97,7 +98,7 @@ EXAMPLES = [
         "style": "Contemporary",
         "lighting": "Bright Daylight",
         "materials": "Lightweight PTFE tensile membrane canopy, architectural fair-faced concrete, frameless structural glass",
-        "user_prompt": "Campus athletic stadium and aquatic center with sweeping aerodynamic roof canopy, glass pavilion and championship running track.",
+        "user_prompt": "university athletics and aquatic center, sweeping curved roof canopy, glass pavilion, running track and sports fields",
         "sketch_file": "sports_arena_sketch.png",
         "render_file": "sports_arena_render.png",
         "controlnet_strength": 0.84,
@@ -120,9 +121,11 @@ def init_sample_assets():
         sk_path = sketch_dir / ex["sketch_file"]
         rd_path = render_dir / ex["render_file"]
         
-        # Always regenerate to ensure top visual fidelity
-        _render_architectural_hand_sketch(str(sk_path), ex, W, H)
-        _render_photorealistic_visualization(str(rd_path), ex, W, H)
+        # Only (re)create missing files, so committed/edited samples are never overwritten on startup
+        if not sk_path.exists():
+            _render_architectural_hand_sketch(str(sk_path), ex, W, H)
+        if not rd_path.exists():
+            _render_photorealistic_visualization(str(rd_path), ex, W, H)
 
 def _render_architectural_hand_sketch(path: str, ex: Dict[str, Any], w: int, h: int):
     """
@@ -130,7 +133,7 @@ def _render_architectural_hand_sketch(path: str, ex: Dict[str, Any], w: int, h: 
     with technical dimensions, overlapping pencil strokes, elevation annotations, and architectural scale.
     """
     # 1. Warm vellum drafting paper base with subtle paper fiber texture
-    np.random.seed(abs(hash(ex["id"])) % 10000)
+    np.random.seed(zlib.crc32(ex["id"].encode()) % 10000)  # stable across runs (hash() is randomised per process)
     base_paper = np.ones((h, w, 3), dtype=np.uint8) * 247
     base_paper[:, :, 0] += np.random.randint(0, 5, (h, w), dtype=np.uint8) # slight warm cream tint
     base_paper[:, :, 1] += np.random.randint(0, 3, (h, w), dtype=np.uint8)

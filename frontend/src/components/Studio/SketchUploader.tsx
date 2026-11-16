@@ -1,6 +1,6 @@
-import React, { useState, useRef } from 'react';
-import { PreprocessResult } from '../../types';
-import { preprocessSketch } from '../../api/client';
+import React, { useState, useRef, useEffect } from 'react';
+import { PreprocessResult, ExampleCase } from '../../types';
+import { preprocessSketch, getExamples } from '../../api/client';
 import { SketchCanvas } from './SketchCanvas';
 import { UploadCloud, Image as ImageIcon, Eye, Trash2, CheckCircle2, AlertCircle, Sparkles, Layers, Edit3 } from 'lucide-react';
 
@@ -8,54 +8,23 @@ interface SketchUploaderProps {
   onSketchProcessed: (res: PreprocessResult) => void;
   currentSketch: PreprocessResult | null;
   onClearSketch: () => void;
-  onSelectSampleSketch: (sampleSketchUrl: string, sampleTitle: string) => void;
+  onSelectExample: (example: ExampleCase) => void;
+  selectedSketchUrl?: string;
 }
-
-const SAMPLE_SKETCHES = [
-  {
-    title: 'Academic Block',
-    url: '/samples/sketches/academic_block_sketch.png',
-    type: 'University Building',
-    style: 'Modern Minimalist'
-  },
-  {
-    title: 'Central Library',
-    url: '/samples/sketches/central_library_sketch.png',
-    type: 'Library',
-    style: 'Contemporary'
-  },
-  {
-    title: 'Biotech Lab',
-    url: '/samples/sketches/biotech_hub_sketch.png',
-    type: 'Research Laboratory',
-    style: 'Sustainable / Green Architecture'
-  },
-  {
-    title: 'Auditorium Hall',
-    url: '/samples/sketches/auditorium_sketch.png',
-    type: 'Auditorium',
-    style: 'Futuristic Parametric'
-  },
-  {
-    title: 'Heritage Quad',
-    url: '/samples/sketches/heritage_hall_sketch.png',
-    type: 'Student Hostel',
-    style: 'Traditional Indian Heritage'
-  },
-  {
-    title: 'Sports Complex',
-    url: '/samples/sketches/sports_arena_sketch.png',
-    type: 'Sports Complex',
-    style: 'Contemporary'
-  }
-];
 
 export const SketchUploader: React.FC<SketchUploaderProps> = ({
   onSketchProcessed,
   currentSketch,
   onClearSketch,
-  onSelectSampleSketch,
+  onSelectExample,
+  selectedSketchUrl,
 }) => {
+  // Preloaded sketches come from the backend, together with the style, lighting, materials and prompt
+  // that belong to each one, so picking a sketch can configure the whole Studio.
+  const [examples, setExamples] = useState<ExampleCase[]>([]);
+  useEffect(() => {
+    getExamples().then(setExamples).catch(() => setExamples([]));
+  }, []);
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -296,23 +265,29 @@ export const SketchUploader: React.FC<SketchUploaderProps> = ({
           Or load an architectural benchmark drawing:
         </p>
         <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-          {SAMPLE_SKETCHES.map((sample) => (
-            <button
-              key={sample.title}
-              onClick={() => onSelectSampleSketch(sample.url, sample.title)}
-              className="text-left p-1.5 rounded-lg border border-slate-200 hover:border-arch-cyan bg-canvas-50 hover:bg-white transition-all group shadow-2xs"
-            >
-              <div className="aspect-[4/3] rounded bg-slate-100 overflow-hidden mb-1 border border-slate-200">
-                <img
-                  src={sample.url}
-                  alt={sample.title}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                />
-              </div>
-              <p className="text-[11px] font-bold text-slate-800 truncate">{sample.title}</p>
-              <p className="text-[9px] text-slate-500 truncate">{sample.type}</p>
-            </button>
-          ))}
+          {examples.map((ex) => {
+            const isSelected = selectedSketchUrl === ex.sketch_url;
+            return (
+              <button
+                key={ex.id}
+                type="button"
+                onClick={() => onSelectExample(ex)}
+                className={`text-left p-1.5 rounded-lg border bg-canvas-50 hover:bg-white transition-all group shadow-2xs ${
+                  isSelected ? 'border-arch-blue ring-2 ring-blue-300' : 'border-slate-200 hover:border-arch-cyan'
+                }`}
+              >
+                <div className="aspect-[4/3] rounded bg-slate-100 overflow-hidden mb-1 border border-slate-200">
+                  <img
+                    src={ex.sketch_url}
+                    alt={ex.title}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                  />
+                </div>
+                <p className="text-[11px] font-bold text-slate-800 truncate">{ex.title}</p>
+                <p className="text-[9px] text-slate-500 truncate">{ex.category} · {ex.style}</p>
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>

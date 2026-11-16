@@ -61,7 +61,22 @@ export interface PreprocessResult {
   cache_hit?: boolean;
 }
 
+/** Everything the Studio needs to reproduce a preloaded example or an earlier project. */
+export interface StudioPreset {
+  sketchUrl?: string;
+  title?: string;
+  style?: string;
+  category?: string;
+  lighting?: string;
+  materials?: string;
+  userPrompt?: string;
+  controlnetStrength?: number;
+  denoisingStrength?: number;
+  guidanceScale?: number;
+}
+
 export interface AppConfig {
+  prompt_profile?: string;
   default_provider: string;
   has_huggingface_key: boolean;
   has_replicate_token: boolean;
@@ -90,6 +105,7 @@ export interface GenerationParams {
   seed: number;
   resolution: string;
   negative_prompt?: string;
+  compiled_prompt?: string;
   provider?: string;
   title?: string;
 }
@@ -118,6 +134,8 @@ export interface GenerationResult {
     model_name?: string;
     model_version?: string;
     cache_hit?: boolean;
+    prompt_profile?: string;
+    structure_conditioned?: boolean;
     status_message: string;
   };
 }

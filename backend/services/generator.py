@@ -17,7 +17,8 @@ from fastapi import HTTPException
 
 from backend.config import GENERATED_DIR, UPLOAD_DIR, settings
 from backend.services.prompt_builder import (
-    PromptBuilder, ARCHITECTURAL_STYLES, LIGHTING_CONDITIONS, BASE_NEGATIVE_PROMPT
+    PromptBuilder, ARCHITECTURAL_STYLES, LIGHTING_CONDITIONS, BASE_NEGATIVE_PROMPT,
+    DEFAULT_NEGATIVE_PROMPT, profile_for_provider
 )
 from backend.services.cache import global_cache, CampusVisionCache
 from backend.database import get_setting
@@ -165,7 +166,8 @@ class ArchitecturalGenerator:
         seed: int = -1,
         resolution: str = "1024x768",
         negative_prompt_override: Optional[str] = None,
-        provider_override: Optional[str] = None
+        provider_override: Optional[str] = None,
+        compiled_prompt_override: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Executes the architectural image-to-image pipeline:
@@ -176,29 +178,56 @@ class ArchitecturalGenerator:
         """
         start_time = time.time()
         
-        # 1. Compile intelligent prompt
-        prompt_data = PromptBuilder.build_prompt(
-            user_prompt=user_prompt,
-            style=style,
-            building_type=building_type,
-            lighting=lighting,
-            materials=materials
-        )
-        compiled_prompt = prompt_data["compiled_prompt"]
-        effective_negative_prompt = (
-            negative_prompt_override.strip()
-            if (negative_prompt_override and negative_prompt_override.strip())
-            else prompt_data["negative_prompt"]
-        )
-        
         # Check active provider & API keys
         settings.reload()
         hf_key = get_setting("HUGGINGFACE_API_KEY") or settings.huggingface_api_key or os.getenv("HUGGINGFACE_API_KEY", "")
         replicate_token = get_setting("REPLICATE_API_TOKEN") or settings.replicate_api_token or os.getenv("REPLICATE_API_TOKEN", "")
         fal_key = get_setting("FAL_KEY") or settings.fal_key or os.getenv("FAL_KEY", "")
-        
+
         preferred_provider = provider_override or get_setting("DEFAULT_PROVIDER") or settings.default_provider
-        
+        target_provider = preferred_provider.lower().strip()
+
+        def _usable(key: str) -> bool:
+            return bool(key and key.strip() and not key.strip().startswith("demo"))
+
+        # "auto": cloud token first (Replicate, Hugging Face, Fal), otherwise local ComfyUI if it is running
+        if target_provider == "auto":
+            if _usable(replicate_token):
+                target_provider = "replicate"
+            elif _usable(hf_key):
+                target_provider = "huggingface"
+            elif _usable(fal_key):
+                target_provider = "fal"
+            elif (await ComfyUIClient.check_status())["reachable"]:
+                target_provider = "comfyui"
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Auto mode found no cloud API key and local ComfyUI is not running. "
+                           "Add a key in Settings, start ComfyUI, or choose Demo mode."
+                )
+
+        # 1. Compile the prompt for the model that will actually read it
+        prompt_profile = profile_for_provider(target_provider)
+        prompt_data = PromptBuilder.build_prompt(
+            user_prompt=user_prompt,
+            style=style,
+            building_type=building_type,
+            lighting=lighting,
+            materials=materials,
+            profile=prompt_profile
+        )
+        compiled_prompt = (
+            compiled_prompt_override.strip()
+            if (compiled_prompt_override and compiled_prompt_override.strip())
+            else prompt_data["compiled_prompt"]
+        )
+        effective_negative_prompt = (
+            negative_prompt_override.strip()
+            if (negative_prompt_override and negative_prompt_override.strip())
+            else prompt_data["negative_prompt"]
+        )
+
         gen_id = str(uuid.uuid4())[:8]
         render_filename = f"{gen_id}_render.png"
         render_path = GENERATED_DIR / render_filename
@@ -210,16 +239,7 @@ class ArchitecturalGenerator:
         model_version_label = None
         used_seed = None
         local_aspect = None
-
-        # Normalize provider selection
-        target_provider = preferred_provider.lower().strip()
-
-        # "auto": prefer a configured cloud token, otherwise use local ComfyUI if it is running
-        if target_provider == "auto":
-            has_cloud_key = bool(replicate_token and not replicate_token.strip().startswith("demo")) or \
-                            bool(hf_key and not hf_key.startswith("demo"))
-            if not has_cloud_key and (await ComfyUIClient.check_status())["reachable"]:
-                target_provider = "comfyui"
+        structure_lost = False
 
         # Check deterministic generation cache (for fixed seeds > 0)
         cache_key = None
@@ -234,8 +254,11 @@ class ArchitecturalGenerator:
                 guidance_scale=guidance_scale,
                 seed=seed,
                 resolution=resolution,
-                model_version=(settings.replicate_version if target_provider in ["replicate", "auto"]
-                               else ("comfyui-sd15-canny" if target_provider in ["comfyui", "local"] else "demo"))
+                model_version=(
+                    f"{target_provider}:{settings.replicate_version}" if target_provider == "replicate"
+                    else f"{target_provider}:{settings.comfyui_checkpoint}:{settings.comfyui_controlnet}" if target_provider in ["comfyui", "local"]
+                    else f"{target_provider}:denoise{denoising_strength:.2f}"
+                )
             )
             cached_gen = global_cache.get_generation(cache_key)
             if cached_gen:
@@ -270,47 +293,28 @@ class ArchitecturalGenerator:
         # -------------------------------------------------------------
         # BRANCH B: Replicate (Primary Provider)
         # -------------------------------------------------------------
-        elif target_provider in ["replicate", "auto"]:
-            # Check for missing credentials
-            if not replicate_token or not replicate_token.strip() or replicate_token.strip().startswith("demo"):
-                # If auto and another provider has key, we can try it, else report missing credentials
-                if target_provider == "auto" and hf_key and not hf_key.startswith("demo"):
-                    # Fallback to Hugging Face if configured
-                    logger.info("Auto-provider: Replicate token missing, switching to configured Hugging Face key...")
-                    await ArchitecturalGenerator._generate_with_huggingface(
-                        hf_key=hf_key,
-                        edge_path=edge_path,
-                        prompt=compiled_prompt,
-                        negative_prompt=effective_negative_prompt,
-                        controlnet_strength=controlnet_strength,
-                        guidance_scale=guidance_scale,
-                        save_path=str(render_path)
+        elif target_provider == "replicate":
+            if not _usable(replicate_token):
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "REPLICATE_API_TOKEN is not configured. Add your Replicate token in Settings or .env, "
+                        "or switch to Local ComfyUI / Demo mode."
                     )
-                    active_provider = "Hugging Face ControlNet SDXL (Live Cloud GPU)"
-                    status_message = "Photorealistic render generated live using Hugging Face Cloud GPU."
-                else:
-                    raise HTTPException(
-                        status_code=400,
-                        detail=(
-                            "REPLICATE_API_TOKEN is not configured. "
-                            "Please add your Replicate API token in Settings or define REPLICATE_API_TOKEN in your .env file to run live AI generation. "
-                            "Alternatively, switch to Demo Simulation Mode in Settings for offline testing."
-                        )
-                    )
-            else:
-                logger.info(f"Executing live ControlNet generation via Replicate ({settings.replicate_model})...")
-                await ArchitecturalGenerator._generate_with_replicate(
-                    replicate_token=replicate_token.strip(),
-                    edge_path=edge_path,
-                    prompt=compiled_prompt,
-                    negative_prompt=effective_negative_prompt,
-                    controlnet_strength=controlnet_strength,
-                    guidance_scale=guidance_scale,
-                    seed=seed,
-                    save_path=str(render_path)
                 )
-                active_provider = f"Replicate SDXL ControlNet ({settings.replicate_model})"
-                status_message = "Photorealistic render generated live via Replicate Cloud GPU ControlNet."
+            logger.info(f"Executing live ControlNet generation via Replicate ({settings.replicate_model})...")
+            await ArchitecturalGenerator._generate_with_replicate(
+                replicate_token=replicate_token.strip(),
+                edge_path=edge_path,
+                prompt=compiled_prompt,
+                negative_prompt=effective_negative_prompt,
+                controlnet_strength=controlnet_strength,
+                guidance_scale=guidance_scale,
+                seed=seed,
+                save_path=str(render_path)
+            )
+            active_provider = f"Replicate SDXL ControlNet ({settings.replicate_model})"
+            status_message = "Photorealistic render generated live via Replicate Cloud GPU ControlNet."
 
         # -------------------------------------------------------------
         # BRANCH C: Hugging Face (Secondary Provider)
@@ -322,7 +326,7 @@ class ArchitecturalGenerator:
                     detail="HUGGINGFACE_API_KEY is not configured. Please add your Hugging Face API key in Settings or .env."
                 )
             logger.info("Executing live ControlNet generation via Hugging Face...")
-            await ArchitecturalGenerator._generate_with_huggingface(
+            hf_text_only = await ArchitecturalGenerator._generate_with_huggingface(
                 hf_key=hf_key.strip(),
                 edge_path=edge_path,
                 prompt=compiled_prompt,
@@ -331,8 +335,14 @@ class ArchitecturalGenerator:
                 guidance_scale=guidance_scale,
                 save_path=str(render_path)
             )
-            active_provider = "Hugging Face ControlNet SDXL (Live Cloud GPU)"
-            status_message = "Photorealistic render generated live via Hugging Face Inference API."
+            structure_lost = bool(hf_text_only)
+            active_provider = "Hugging Face SDXL (Live Cloud GPU)"
+            status_message = (
+                "Hugging Face could not run ControlNet, so plain SDXL text-to-image was used. "
+                "The sketch's structure was NOT preserved; use Local ComfyUI or Replicate for faithful renders."
+                if structure_lost else
+                "Photorealistic render generated live via Hugging Face Inference API."
+            )
 
         # -------------------------------------------------------------
         # BRANCH D: Fal.ai (Secondary Provider)
@@ -350,6 +360,7 @@ class ArchitecturalGenerator:
                 prompt=compiled_prompt,
                 negative_prompt=effective_negative_prompt,
                 guidance_scale=guidance_scale,
+                strength=denoising_strength,
                 save_path=str(render_path)
             )
             active_provider = "Fal.ai Fast SDXL Img2Img (Live Cloud GPU)"
@@ -412,14 +423,20 @@ class ArchitecturalGenerator:
             "controlnet_strength": controlnet_strength,
             "denoising_strength": denoising_strength,
             "guidance_scale": guidance_scale,
-            "seed": used_seed if used_seed is not None else (seed if seed != -1 else int(time.time() % 100000)),
+            "seed": used_seed if used_seed is not None else (seed if seed > 0 else -1),
+            "prompt_profile": prompt_profile,
+            "structure_conditioned": (target_provider in ("comfyui", "local", "replicate", "huggingface", "hf", "demo")) and not structure_lost,
             "resolution": resolution,
             "aspect_ratio": aspect_ratio,
             "inference_time_sec": elapsed,
             "provider": active_provider,
             "is_demo_mode": is_demo_mode,
-            "model_name": model_name_label or (settings.replicate_model if not is_demo_mode else "Procedural Synthesis Engine"),
-            "model_version": model_version_label or (settings.replicate_version if not is_demo_mode else "v2.0"),
+            "model_name": model_name_label or (
+                "Procedural Synthesis Engine" if is_demo_mode
+                else {"huggingface": "SDXL via Hugging Face Inference", "hf": "SDXL via Hugging Face Inference",
+                      "fal": "fal-ai/fast-sdxl image-to-image", "fal_ai": "fal-ai/fast-sdxl image-to-image"}.get(target_provider, settings.replicate_model)),
+            "model_version": model_version_label or (
+                "v2.0" if is_demo_mode else (settings.replicate_version if target_provider == "replicate" else "hosted")),
             "cache_hit": False,
             "status_message": status_message
         }
@@ -639,33 +656,36 @@ class ArchitecturalGenerator:
         with open(edge_path, "rb") as f:
             edge_b64 = base64.b64encode(f.read()).decode("utf-8")
             
+        # NOTE: the HF serverless API does not reliably host ControlNet pipelines. The first two
+        # endpoints try the ControlNet model; the last one is plain SDXL text-to-image, where the edge
+        # map cannot be used (the prompt must be sent as `inputs`, never the image).
         endpoints = [
-            "https://router.huggingface.co/hf-inference/models/diffusers/controlnet-canny-sdxl-1.0",
-            "https://api-inference.huggingface.co/models/diffusers/controlnet-canny-sdxl-1.0",
-            "https://router.huggingface.co/hf-inference/models/stabilityai/stable-diffusion-xl-base-1.0"
+            ("https://router.huggingface.co/hf-inference/models/diffusers/controlnet-canny-sdxl-1.0", True),
+            ("https://api-inference.huggingface.co/models/diffusers/controlnet-canny-sdxl-1.0", True),
+            ("https://router.huggingface.co/hf-inference/models/stabilityai/stable-diffusion-xl-base-1.0", False),
         ]
-        
+
         headers = {
             "Authorization": f"Bearer {hf_key}",
             "Content-Type": "application/json"
         }
-        
-        payload = {
-            "inputs": f"data:image/png;base64,{edge_b64}",
-            "parameters": {
-                "prompt": prompt,
+
+        def _payload(with_edges: bool) -> Dict[str, Any]:
+            params: Dict[str, Any] = {
                 "negative_prompt": negative_prompt,
-                "controlnet_conditioning_scale": controlnet_strength,
                 "guidance_scale": guidance_scale,
-                "num_inference_steps": 30
+                "num_inference_steps": 30,
             }
-        }
-        
+            if with_edges:
+                params["controlnet_conditioning_scale"] = controlnet_strength
+                return {"inputs": prompt, "image": f"data:image/png;base64,{edge_b64}", "parameters": params}
+            return {"inputs": prompt, "parameters": params}
+
         last_error = None
         async with httpx.AsyncClient(timeout=120.0) as client:
-            for ep in endpoints:
+            for ep, with_edges in endpoints:
                 try:
-                    resp = await client.post(ep, headers=headers, json=payload)
+                    resp = await client.post(ep, headers=headers, json=_payload(with_edges))
                     if resp.status_code == 200:
                         try:
                             pil_test = Image.open(BytesIO(resp.content))
@@ -675,7 +695,9 @@ class ArchitecturalGenerator:
                             continue
                         with open(save_path, "wb") as out_f:
                             out_f.write(resp.content)
-                        return
+                        if not with_edges:
+                            logger.warning("HF fallback used plain SDXL text-to-image: sketch structure was NOT preserved.")
+                        return not with_edges
                     elif resp.status_code == 401:
                         raise HTTPException(
                             status_code=401,
@@ -705,9 +727,10 @@ class ArchitecturalGenerator:
         prompt: str,
         negative_prompt: str,
         guidance_scale: float,
-        save_path: str
+        save_path: str,
+        strength: float = 0.70
     ):
-        """Calls Fal.ai API for fast SDXL image-to-image generation."""
+        """Calls Fal.ai API for fast SDXL image-to-image generation (init image = the sketch, no ControlNet)."""
         if not os.path.exists(sketch_path):
             raise HTTPException(status_code=400, detail="Sketch image file not found.")
 
@@ -726,7 +749,7 @@ class ArchitecturalGenerator:
             "prompt": prompt,
             "negative_prompt": negative_prompt,
             "guidance_scale": guidance_scale,
-            "strength": 0.70
+            "strength": round(float(strength), 2)
         }
         
         async with httpx.AsyncClient(timeout=120.0) as client:

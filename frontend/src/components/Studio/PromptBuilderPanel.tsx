@@ -13,7 +13,10 @@ interface PromptBuilderPanelProps {
   onMaterialsChange: (m: string) => void;
   userPrompt: string;
   onUserPromptChange: (p: string) => void;
-  onCompiledPromptReady: (compiled: string, negative: string) => void;
+  /** `manual` is true only when the user typed over the compiled prompt (Manual Override). */
+  onCompiledPromptReady: (compiled: string, negative: string, manual: boolean) => void;
+  /** Engine the prompt is written for (comfyui / replicate / huggingface / fal / demo). */
+  provider?: string;
 }
 
 const STYLES = [
@@ -66,11 +69,13 @@ export const PromptBuilderPanel: React.FC<PromptBuilderPanelProps> = ({
   userPrompt,
   onUserPromptChange,
   onCompiledPromptReady,
+  provider,
 }) => {
   const [compiledPrompt, setCompiledPrompt] = useState('');
   const [negativePrompt, setNegativePrompt] = useState('');
   const [isEditingCompiled, setIsEditingCompiled] = useState(false);
   const [showPromptPreview, setShowPromptPreview] = useState(true);
+  const [profileLabel, setProfileLabel] = useState('');
 
   // Auto-recompile whenever options change
   useEffect(() => {
@@ -83,18 +88,22 @@ export const PromptBuilderPanel: React.FC<PromptBuilderPanelProps> = ({
           building_type: buildingType,
           lighting,
           materials,
+          provider,
         });
         if (isMounted) {
+          // Changing any option rebuilds the prompt for the active model and drops an older manual edit
           setCompiledPrompt(res.compiled_prompt);
           setNegativePrompt(res.negative_prompt);
-          onCompiledPromptReady(res.compiled_prompt, res.negative_prompt);
+          setProfileLabel(res.prompt_profile_label || '');
+          setIsEditingCompiled(false);
+          onCompiledPromptReady(res.compiled_prompt, res.negative_prompt, false);
         }
       } catch (err) {
         // Fallback local compilation if offline
         const localCompiled = `architectural visualization of a ${buildingType}, ${style}, ${userPrompt}, ${lighting} light, realistic, sharp focus, high detail`;
         if (isMounted) {
           setCompiledPrompt(localCompiled);
-          onCompiledPromptReady(localCompiled, '');
+          onCompiledPromptReady(localCompiled, '', false);
         }
       }
     }, 250);
@@ -103,7 +112,7 @@ export const PromptBuilderPanel: React.FC<PromptBuilderPanelProps> = ({
       isMounted = false;
       clearTimeout(timer);
     };
-  }, [userPrompt, style, buildingType, lighting, materials]);
+  }, [userPrompt, style, buildingType, lighting, materials, provider]);
 
   return (
     <div className="bg-white rounded-xl border border-canvas-300 shadow-subtle p-5 space-y-5">
@@ -272,7 +281,7 @@ export const PromptBuilderPanel: React.FC<PromptBuilderPanelProps> = ({
                 value={compiledPrompt}
                 onChange={(e) => {
                   setCompiledPrompt(e.target.value);
-                  onCompiledPromptReady(e.target.value, negativePrompt);
+                  onCompiledPromptReady(e.target.value, negativePrompt, true);
                 }}
                 className="w-full text-[11px] font-mono p-2 bg-white border border-slate-300 rounded text-slate-800 focus:outline-none focus:ring-1 focus:ring-arch-cyan leading-relaxed"
               />
@@ -282,7 +291,7 @@ export const PromptBuilderPanel: React.FC<PromptBuilderPanelProps> = ({
               </p>
             )}
             <p className="text-[10px] text-slate-500 mt-1.5 font-mono">
-              The prompt is kept short on purpose: Stable Diffusion 1.5 reads about 75 tokens, and the sketch edges control the shape.
+              {profileLabel ? `Written for: ${profileLabel}. ` : ''}The sketch edges control the shape; the prompt only describes what to draw. Changing any option rebuilds the prompt.
             </p>
           </div>
         )}

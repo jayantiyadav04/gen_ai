@@ -148,18 +148,24 @@ class ImageProcessor:
         # 4. Bilateral filter preserves sharp building boundaries while smoothing grain
         blurred = cv2.bilateralFilter(enhanced, d=7, sigmaColor=75, sigmaSpace=75)
         
-        # 5. Dynamic luminance-adaptive Canny calculation
+        # 5. Canny thresholds are GRADIENT limits, not brightness limits. The old rule derived them from
+        # the median brightness (~250 on white paper -> 163/220), which discarded faint pencil strokes.
+        # Use the strength of the strongest gradients in the drawing instead, with sane bounds.
         if low_threshold is None or high_threshold is None:
-            # Calculate median intensity inside the sketch region
             roi = blurred[y_offset:y_offset + scaled_h, x_offset:x_offset + scaled_w]
-            med = float(np.median(roi)) if roi.size > 0 else 128.0
-            sigma = 0.33
-            low_thresh = int(max(30, (1.0 - sigma) * med))
-            high_thresh = int(min(220, (1.0 + sigma) * med))
+            if roi.size > 0:
+                gx = cv2.Sobel(roi, cv2.CV_32F, 1, 0, ksize=3)
+                gy = cv2.Sobel(roi, cv2.CV_32F, 0, 1, ksize=3)
+                mag = cv2.magnitude(gx, gy) / 4.0   # Sobel 3x3 gain -> back to ~0-255 contrast scale
+                strong = float(np.percentile(mag, 97)) if np.any(mag > 0) else 100.0
+            else:
+                strong = 100.0
+            high_thresh = int(min(160, max(60, 0.5 * strong)))
+            low_thresh = int(max(20, 0.4 * high_thresh))
         else:
             low_thresh = low_threshold
             high_thresh = high_threshold
-            
+
         edges = cv2.Canny(blurred, low_thresh, high_thresh)
         
         # 6. Morphological lineart dilation for crisp ControlNet line conditioning
