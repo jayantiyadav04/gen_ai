@@ -152,7 +152,7 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
             {/* Rendered Photoreal Image (Full base) */}
             <img
               src={renderUrl}
-              alt="AI Photorealistic Campus Render"
+              alt="AI Campus Render"
               className="absolute inset-0 w-full h-full object-cover"
             />
 
@@ -177,7 +177,7 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
 
             {/* Badge: Photoreal Render */}
             <div className="absolute top-3 right-3 bg-emerald-950/80 backdrop-blur-sm text-emerald-300 border border-emerald-500/40 px-2.5 py-1 rounded text-[11px] font-mono font-medium shadow-md">
-              AI Photoreal Render
+              AI Render
             </div>
 
             {/* Draggable Divider Handle */}
@@ -215,11 +215,11 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
             <div className="relative aspect-[4/3] bg-slate-950 flex flex-col items-center justify-center">
               <img
                 src={renderUrl}
-                alt="AI Photoreal Render"
+                alt="AI Render"
                 className="w-full h-full object-cover"
               />
               <div className="absolute top-3 right-3 bg-emerald-950/85 backdrop-blur-sm text-emerald-300 border border-emerald-500/40 px-2.5 py-1 rounded text-[11px] font-mono font-semibold">
-                AI Photoreal Render
+                AI Render
               </div>
             </div>
           </div>
@@ -230,7 +230,7 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
             {/* Base Photoreal Render */}
             <img
               src={renderUrl}
-              alt="AI Photoreal Render"
+              alt="AI Render"
               className="absolute inset-0 w-full h-full object-cover"
             />
             {/* Superimposed OpenCV Canny Edges in Blueprint Cyan */}

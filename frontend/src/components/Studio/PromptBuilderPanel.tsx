@@ -91,7 +91,7 @@ export const PromptBuilderPanel: React.FC<PromptBuilderPanelProps> = ({
         }
       } catch (err) {
         // Fallback local compilation if offline
-        const localCompiled = `Photorealistic architectural photograph of a university campus facility, ${buildingType}, ${style}, materials: ${materials}, features: ${userPrompt}, lighting: ${lighting}, manicured university lawns, pedestrian students walking naturally, 8k resolution, ArchDaily standard`;
+        const localCompiled = `architectural visualization of a ${buildingType}, ${style}, ${userPrompt}, ${lighting} light, realistic, sharp focus, high detail`;
         if (isMounted) {
           setCompiledPrompt(localCompiled);
           onCompiledPromptReady(localCompiled, '');
@@ -278,11 +278,11 @@ export const PromptBuilderPanel: React.FC<PromptBuilderPanelProps> = ({
               />
             ) : (
               <p className="text-[11px] font-mono text-slate-700 bg-white/70 p-2.5 rounded border border-canvas-200 leading-relaxed max-h-24 overflow-y-auto">
-                {compiledPrompt || 'Compiling architectural tokens...'}
+                {compiledPrompt || 'Preparing prompt...'}
               </p>
             )}
             <p className="text-[10px] text-slate-500 mt-1.5 font-mono">
-              The AI engine automatically injects architectural perspective constraints, ray-traced materials, and Hasselblad tilt-shift photographic tokens.
+              The prompt is kept short on purpose: Stable Diffusion 1.5 reads about 75 tokens, and the sketch edges control the shape.
             </p>
           </div>
         )}

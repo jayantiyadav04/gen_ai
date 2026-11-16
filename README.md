@@ -132,14 +132,21 @@ All 9 end-to-end integration tests will run:
 
 ---
 
-## 6. Configuring Live Cloud GPU Diffusion
+## 6. Choosing the Generation Engine
 
-By default, CampusVision AI runs in **Authentic Procedural Demonstration Mode**, allowing complete exploration of sketch upload, OpenCV edge extraction, prompt engineering, comparison sliders, and project history without needing external credentials.
+CampusVision AI supports several engines. Pick one in **Settings** (top-right pill) or with `DEFAULT_PROVIDER` in `.env`.
 
-To connect live cloud GPU diffusion:
-1. Open the application and click the **Settings** icon (or top-right pill).
-2. Enter your free **Hugging Face Token** (from [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)) or **Replicate API Token**.
-3. Click **Save Settings**. The status indicator will turn green (`Live Cloud GPU Connected`).
+**Local ComfyUI (default, free):** Stable Diffusion 1.5 + ControlNet Canny running on your own computer.
+1. Install ComfyUI Desktop and place `v1-5-pruned-emaonly.safetensors` (checkpoints) and `control_v11p_sd15_canny_fp16.safetensors` (controlnet) in its models folder.
+2. Keep ComfyUI Desktop open. Check its port and set `COMFYUI_URL` in `.env` if it is not `http://127.0.0.1:8188`.
+3. Open Settings, choose **Local ComfyUI**, and press **Check ComfyUI connection**.
+4. Generate. A render takes about 1-3 minutes on a 16 GB MacBook; the first run is slower.
+
+Local renders are concept-quality (up to 768 px). The prompt builder keeps prompts short because Stable Diffusion 1.5 only reads about 75 tokens.
+
+**Cloud providers (optional):** enter a Hugging Face or Replicate token in Settings and select that engine.
+
+**Demo mode:** an offline procedural simulation for exploring the interface without any AI model.
 
 ---
 

@@ -76,7 +76,7 @@ export const BoardExportModal: React.FC<BoardExportModalProps> = ({
                 {project.title}
               </h1>
               <p className="text-xs text-slate-600 mt-0.5">
-                Campus Capital Expansion • Architectural Concept to Photorealistic Synthesis
+                Campus Capital Expansion • Architectural Concept to AI Render
               </p>
             </div>
 
@@ -112,17 +112,17 @@ export const BoardExportModal: React.FC<BoardExportModalProps> = ({
             <div className="space-y-2 border-2 border-arch-blue/40 rounded-lg p-3 bg-blue-50/20">
               <div className="flex items-center justify-between text-xs font-mono">
                 <span className="font-bold text-navy-900 uppercase">Fig 2. Diffused Architectural Visualization</span>
-                <span className="text-emerald-700 font-semibold">Photoreal Output</span>
+                <span className="text-emerald-700 font-semibold">AI Render Output</span>
               </div>
               <div className="aspect-[4/3] rounded bg-slate-900 overflow-hidden border border-slate-300">
                 <img
                   src={project.render_url}
-                  alt="AI Photoreal Render"
+                  alt="AI Campus Render"
                   className="w-full h-full object-cover"
                 />
               </div>
               <p className="text-[10px] text-slate-600 font-mono">
-                Synthesized ray-traced glass curtain walls, fair-faced concrete, and campus landscape atmosphere.
+                AI-generated materials, lighting and campus landscape added on top of the original sketch outline.
               </p>
             </div>
           </div>

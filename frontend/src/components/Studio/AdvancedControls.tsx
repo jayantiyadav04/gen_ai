@@ -9,6 +9,7 @@ interface AdvancedControlsProps {
   guidanceScale: number;
   onGuidanceScaleChange: (v: number) => void;
   seed: number;
+  isLocal?: boolean;
   onSeedChange: (v: number) => void;
   resolution: string;
   onResolutionChange: (v: string) => void;
@@ -24,6 +25,7 @@ export const AdvancedControls: React.FC<AdvancedControlsProps> = ({
   guidanceScale,
   onGuidanceScaleChange,
   seed,
+  isLocal,
   onSeedChange,
   resolution,
   onResolutionChange,
@@ -87,7 +89,7 @@ export const AdvancedControls: React.FC<AdvancedControlsProps> = ({
             <div className="space-y-1.5 bg-white p-3.5 rounded-lg border border-slate-200">
               <div className="flex items-center justify-between">
                 <label className="font-semibold text-navy-900 font-sans">
-                  Photoreal Denoising Strength
+                  Denoising Strength
                 </label>
                 <span className="font-mono font-bold text-arch-blue bg-blue-50 px-1.5 py-0.5 rounded">
                   {denoisingStrength.toFixed(2)}
@@ -99,11 +101,12 @@ export const AdvancedControls: React.FC<AdvancedControlsProps> = ({
                 max="0.95"
                 step="0.05"
                 value={denoisingStrength}
+                disabled={isLocal}
                 onChange={(e) => onDenoisingStrengthChange(parseFloat(e.target.value))}
-                className="w-full accent-arch-cyan cursor-pointer"
+                className={`w-full accent-arch-cyan ${isLocal ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
               />
               <p className="text-[10px] text-slate-500">
-                Amount of architectural texture and realistic material synthesis.
+                {isLocal ? 'Not used in local mode: the render always starts from the sketch edges.' : 'Amount of architectural texture and realistic material synthesis.'}
               </p>
             </div>
 
@@ -127,7 +130,7 @@ export const AdvancedControls: React.FC<AdvancedControlsProps> = ({
                 className="w-full accent-arch-cyan cursor-pointer"
               />
               <p className="text-[10px] text-slate-500">
-                Standard 7.0 - 9.0 gives balanced architectural realism.
+                Around 7 works well for Stable Diffusion 1.5. Much higher values look harsh.
               </p>
             </div>
           </div>
@@ -148,8 +151,9 @@ export const AdvancedControls: React.FC<AdvancedControlsProps> = ({
                   <button
                     key={res.val}
                     type="button"
+                    disabled={isLocal}
                     onClick={() => onResolutionChange(res.val)}
-                    className={`py-1.5 px-2 rounded text-[11px] font-mono border transition-all ${
+                    className={`py-1.5 px-2 rounded text-[11px] font-mono border transition-all ${isLocal ? 'opacity-50 cursor-not-allowed ' : ''}${
                       resolution === res.val
                         ? 'bg-navy-900 text-white border-navy-900 font-semibold shadow-xs'
                         : 'bg-canvas-50 text-slate-700 border-slate-200 hover:bg-canvas-100'
@@ -159,6 +163,11 @@ export const AdvancedControls: React.FC<AdvancedControlsProps> = ({
                   </button>
                 ))}
               </div>
+              {isLocal && (
+                <p className="text-[10px] text-slate-500">
+                  Local mode keeps your sketch's shape and renders at up to 768 px to suit a laptop.
+                </p>
+              )}
             </div>
 
             {/* Seed */}

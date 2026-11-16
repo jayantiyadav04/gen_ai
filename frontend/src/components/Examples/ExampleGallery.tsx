@@ -40,8 +40,8 @@ export const ExampleGallery: React.FC<ExampleGalleryProps> = ({ onLoadExampleToS
             Campus Architectural Case Studies
           </h1>
           <p className="text-sm text-slate-600 mt-1 max-w-2xl">
-            Explore authentic sketch-to-photoreal campus transformations. Each study preserves
-            original structural elevations while diffusing ray-traced materials, landscape context, and lighting.
+            Explore sketch-to-render campus examples. Each study keeps the original
+            elevation while adding materials, landscape context, and lighting.
           </p>
         </div>
 

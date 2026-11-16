@@ -34,6 +34,44 @@ from backend.services.cache import global_cache
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("campusvision.main")
 
+# Public URL prefix -> folder, used to turn URLs into safe file paths and back
+_PUBLIC_DIRS = [
+    ("/uploads", UPLOAD_DIR),
+    ("/samples", SAMPLES_DIR),
+    ("/generated", GENERATED_DIR),
+]
+
+
+def resolve_public_file(url: str) -> Optional[Path]:
+    """Maps a public URL (e.g. /uploads/x_sketch.png or the legacy /backend/uploads/...) to a file,
+    only if it really lives inside uploads/samples/generated. Blocks '..' tricks."""
+    if not url:
+        return None
+    clean = "/" + url.split("?", 1)[0].lstrip("/")
+    if clean.startswith("/backend/"):
+        clean = clean[len("/backend"):]
+    for prefix, folder in _PUBLIC_DIRS:
+        if clean.startswith(prefix + "/"):
+            candidate = (folder / clean[len(prefix) + 1:]).resolve()
+            try:
+                candidate.relative_to(folder.resolve())
+            except ValueError:
+                return None
+            return candidate if candidate.is_file() else None
+    return None
+
+
+def to_public_url(path: str) -> str:
+    """Turns a file path inside uploads/samples/generated into the URL the server really serves."""
+    resolved = Path(path).resolve()
+    for prefix, folder in _PUBLIC_DIRS:
+        try:
+            return f"{prefix}/{resolved.relative_to(folder.resolve()).as_posix()}"
+        except ValueError:
+            continue
+    return "/" + resolved.relative_to(BASE_DIR).as_posix()
+
+
 app = FastAPI(
     title=settings.app_name,
     version=settings.version,
@@ -230,28 +268,32 @@ async def generate_render_endpoint(req: GenerateRequest):
 
     # If user provided a sketch_url (e.g. from examples or existing upload)
     if not sketch_path and req.sketch_url:
-        clean_url = req.sketch_url.lstrip("/")
-        candidate = BASE_DIR / clean_url
-        if candidate.exists():
+        candidate = resolve_public_file(req.sketch_url)
+        if candidate:
             sketch_path = str(candidate)
-            # Check corresponding edge or generate on the fly
+            # Use the matching edge map if it exists, otherwise it is generated below
             edge_cand = candidate.parent / candidate.name.replace("_sketch", "_edge")
-            if edge_cand.exists():
+            if edge_cand.exists() and edge_cand != candidate:
                 edge_path = str(edge_cand)
 
     if not sketch_path or not Path(sketch_path).exists():
-        # Fallback to the first available sample sketch so generation never crashes unexpectedly
+        if req.sketch_id or req.sketch_url:
+            # The user picked a specific sketch - do not silently render a different one
+            raise HTTPException(
+                status_code=400,
+                detail="The selected sketch could not be found on the server. Please upload it again."
+            )
+        # Nothing selected at all: fall back to the bundled sample sketch
         default_sketch = SAMPLES_DIR / "sketches" / "academic_block_sketch.png"
         if default_sketch.exists():
             sketch_path = str(default_sketch)
-            # Create edge map for it if needed
             edge_res = ImageProcessor.process_sketch(sketch_path, "sample_default")
             edge_path = edge_res["edge_path"]
         else:
             raise HTTPException(status_code=400, detail="Architectural sketch not found. Please upload a sketch first.")
 
     if not edge_path or not Path(edge_path).exists():
-        edge_res = ImageProcessor.process_sketch(sketch_path, f"temp_{int(time.time())}")
+        edge_res = ImageProcessor.process_sketch(sketch_path, f"auto_{Path(sketch_path).stem}")
         edge_path = edge_res["edge_path"]
 
     # 2. Run generative AI pipeline
@@ -273,8 +315,8 @@ async def generate_render_endpoint(req: GenerateRequest):
     )
 
     # 3. Determine public sketch & edge URLs
-    rel_sketch = "/" + str(Path(sketch_path).relative_to(BASE_DIR))
-    rel_edge = "/" + str(Path(edge_path).relative_to(BASE_DIR))
+    rel_sketch = to_public_url(sketch_path)
+    rel_edge = to_public_url(edge_path)
 
     # 4. Save to project history database
     title = req.title or f"{req.building_type} ({req.style})"
@@ -294,11 +336,11 @@ async def generate_render_endpoint(req: GenerateRequest):
         "denoising_strength": req.denoising_strength,
         "guidance_scale": req.guidance_scale,
         "seed": gen_result["seed"],
-        "resolution": req.resolution,
+        "resolution": gen_result.get("resolution", req.resolution),
         "inference_time_sec": gen_result["inference_time_sec"],
         "provider": gen_result["provider"],
         "is_demo_mode": gen_result["is_demo_mode"],
-        "model_name": gen_result.get("model_name", "lucataco/sdxl-controlnet"),
+        "model_name": gen_result.get("model_name", "Unknown model"),
         "model_version": gen_result.get("model_version", settings.replicate_version),
         "cache_hit": gen_result.get("cache_hit", False),
         "aspect_ratio": gen_result.get("aspect_ratio", "4:3")
@@ -372,7 +414,7 @@ if FRONTEND_DIST.exists():
 
     @app.get("/{full_path:path}")
     def serve_frontend_spa(full_path: str):
-        if full_path.startswith(("api", "uploads", "generated", "samples")):
+        if full_path.split("/", 1)[0] in ("api", "uploads", "generated", "samples", "backend"):
             raise HTTPException(status_code=404, detail="Not found")
         file_path = FRONTEND_DIST / full_path
         if file_path.is_file():

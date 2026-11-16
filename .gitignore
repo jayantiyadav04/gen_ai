@@ -42,3 +42,5 @@ backend/.env
 backend_backup/
 frontend.zip
 *.tmp
+
+*.tmp*.tsbuildinfo

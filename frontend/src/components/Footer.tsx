@@ -24,7 +24,7 @@ export const Footer: React.FC<FooterProps> = ({ onOpenArchitecture, onOpenSettin
             <p className="text-xs text-slate-600 max-w-md leading-relaxed">
               University Generative AI Research & Architectural Visualization Engine.
               Empowering campus planning committees, educational architects, and board presentations
-              with structural sketch-to-photoreal image-to-image diffusion.
+              with sketch-to-render diffusion guided by ControlNet.
             </p>
             <div className="flex items-center gap-3 text-xs text-slate-500 font-mono">
               <span className="inline-flex items-center gap-1">
@@ -62,7 +62,7 @@ export const Footer: React.FC<FooterProps> = ({ onOpenArchitecture, onOpenSettin
                   onClick={onOpenSettings}
                   className="hover:text-arch-blue transition-colors"
                 >
-                  Cloud Model Providers (HF / Replicate)
+                  Generation Engine (Local ComfyUI / Cloud)
                 </button>
               </li>
             </ul>
@@ -84,7 +84,7 @@ export const Footer: React.FC<FooterProps> = ({ onOpenArchitecture, onOpenSettin
               </div>
               <div className="flex justify-between font-mono text-[11px]">
                 <span className="text-slate-500">Output:</span>
-                <span className="font-semibold text-emerald-700">4K Photoreal Renders</span>
+                <span className="font-semibold text-emerald-700">Concept Renders (SD 1.5)</span>
               </div>
             </div>
           </div>

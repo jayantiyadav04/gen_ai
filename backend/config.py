@@ -51,7 +51,7 @@ class Settings(BaseModel):
     fal_key: str = os.getenv("FAL_KEY", "")
     
     # Provider selection: 'replicate' | 'huggingface' | 'fal' | 'demo' | 'auto'
-    default_provider: str = os.getenv("DEFAULT_PROVIDER") or os.getenv("AI_PROVIDER") or "replicate"
+    default_provider: str = os.getenv("DEFAULT_PROVIDER") or os.getenv("AI_PROVIDER") or "comfyui"
     
     # Primary Replicate Model specification (SDXL ControlNet Canny)
     replicate_model: str = "lucataco/sdxl-controlnet"
@@ -73,7 +73,7 @@ class Settings(BaseModel):
         self.huggingface_api_key = os.getenv("HUGGINGFACE_API_KEY", "")
         self.replicate_api_token = os.getenv("REPLICATE_API_TOKEN", "")
         self.fal_key = os.getenv("FAL_KEY", "")
-        self.default_provider = os.getenv("DEFAULT_PROVIDER") or os.getenv("AI_PROVIDER") or "replicate"
+        self.default_provider = os.getenv("DEFAULT_PROVIDER") or os.getenv("AI_PROVIDER") or "comfyui"
         self.replicate_poll_timeout = int(os.getenv("REPLICATE_POLL_TIMEOUT", "120"))
         self.comfyui_url = os.getenv("COMFYUI_URL", "http://127.0.0.1:8188")
         self.comfyui_checkpoint = os.getenv("COMFYUI_CHECKPOINT", "v1-5-pruned-emaonly.safetensors")

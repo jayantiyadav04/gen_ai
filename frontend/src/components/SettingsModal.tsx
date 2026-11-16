@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { AppConfig } from '../types';
 import { updateConfig, testProvider } from '../api/client';
 import { X, Key, CheckCircle2, AlertTriangle, ExternalLink, ShieldCheck, Sparkles, RefreshCw, Cpu } from 'lucide-react';
@@ -19,11 +19,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [replicateToken, setReplicateToken] = useState('');
   const [hfKey, setHfKey] = useState('');
   const [falKey, setFalKey] = useState('');
-  const [provider, setProvider] = useState(config?.default_provider || 'replicate');
+  const [provider, setProvider] = useState(config?.default_provider || 'comfyui');
   const [isSaving, setIsSaving] = useState(false);
   const [testingProvider, setTestingProvider] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<{ provider: string; valid: boolean; message: string } | null>(null);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // Keep the dropdown in sync with the real saved engine (config loads after first render)
+  useEffect(() => {
+    if (config?.default_provider) setProvider(config.default_provider);
+  }, [config?.default_provider, isOpen]);
 
   if (!isOpen) return null;
 
@@ -72,7 +77,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         const hasRep = Boolean(replicateToken.trim() || config.has_replicate_token);
         const hasHf = Boolean(hfKey.trim() || config.has_huggingface_key);
         const hasFal = Boolean(falKey.trim() || config.has_fal_key);
-        const isDemo = provider === 'demo' || (!hasRep && !hasHf && !hasFal);
+        const isLocalEngine = provider === 'comfyui' || provider === 'local';
+        const isDemo = provider === 'demo' || (!isLocalEngine && !hasRep && !hasHf && !hasFal);
 
         onConfigUpdated({
           ...config,
@@ -81,7 +87,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           has_huggingface_key: hasHf,
           has_fal_key: hasFal,
           is_demo_mode: isDemo,
-          active_provider_label: hasRep
+          active_provider_label: isLocalEngine
+            ? 'Local ComfyUI (SD 1.5 + ControlNet Canny)'
+            : hasRep
             ? 'Replicate SDXL ControlNet (lucataco/sdxl-controlnet)'
             : isDemo
             ? 'Demo Simulation Mode (Offline Procedural)'
@@ -112,7 +120,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 Generative AI Model Settings
               </h3>
               <p className="text-xs text-slate-500">
-                Primary Model: Replicate SDXL ControlNet Canny
+                Default engine: local Stable Diffusion 1.5 + ControlNet Canny (ComfyUI)
               </p>
             </div>
           </div>
@@ -142,12 +150,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               )}
               <div>
                 <p className="font-semibold">
-                  Status: {config?.is_demo_mode ? 'Demo Architectural Engine Active' : 'Live Cloud GPU Connected'}
+                  Status: {config?.is_demo_mode ? 'Demo Architectural Engine Active' : provider === 'comfyui' || provider === 'local' ? 'Local ComfyUI Engine Selected' : 'Cloud GPU Connected'}
                 </p>
                 <p className="mt-0.5 text-slate-600">
                   {config?.is_demo_mode
-                    ? 'Currently in offline mode. Enter your Replicate API token below to execute genuine cloud GPU ControlNet diffusion.'
-                    : 'System is connected to Replicate cloud GPU models for ControlNet architectural diffusion.'}
+                    ? 'Currently in offline mode. Choose Local ComfyUI below, or add a cloud API token.'
+                    : provider === 'comfyui' || provider === 'local'
+                    ? 'Images are generated on this computer. Keep ComfyUI Desktop open. The first image is slower while the models load.'
+                    : 'System is connected to a cloud GPU provider for ControlNet architectural diffusion.'}
                 </p>
               </div>
             </div>
@@ -163,12 +173,40 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               onChange={(e) => setProvider(e.target.value)}
               className="w-full text-xs font-medium px-3 py-2 bg-canvas-50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-arch-cyan"
             >
+              <option value="comfyui">Local ComfyUI (Free: Stable Diffusion 1.5 + ControlNet Canny)</option>
               <option value="replicate">Replicate Cloud GPU (Primary: lucataco/sdxl-controlnet)</option>
               <option value="auto">Auto-Select (Use Replicate if token present)</option>
               <option value="demo">Demo Simulation Mode (Explicit offline procedural testing)</option>
               <option value="huggingface">Hugging Face Inference API (Secondary)</option>
               <option value="fal">Fal.ai Fast SDXL (Secondary)</option>
             </select>
+            {(provider === 'comfyui' || provider === 'local') && (
+              <div className="mt-2 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setTestingProvider('comfyui');
+                    setTestResult(null);
+                    try {
+                      setTestResult(await testProvider('comfyui', ''));
+                    } catch (err: any) {
+                      setTestResult({ provider: 'comfyui', valid: false, message: err.message || 'Connection test failed' });
+                    } finally {
+                      setTestingProvider(null);
+                    }
+                  }}
+                  disabled={testingProvider === 'comfyui'}
+                  className="text-[11px] font-semibold px-2.5 py-1 rounded border border-slate-300 bg-white text-navy-900 hover:bg-canvas-100 disabled:opacity-60"
+                >
+                  {testingProvider === 'comfyui' ? 'Checking...' : 'Check ComfyUI connection'}
+                </button>
+                {testResult && testResult.provider.toLowerCase().includes('comfyui') && (
+                  <span className={`text-[11px] ${testResult.valid ? 'text-emerald-700' : 'text-rose-700'}`}>
+                    {testResult.message}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Replicate Token Input (PRIMARY) */}

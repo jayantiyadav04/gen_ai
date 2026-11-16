@@ -31,6 +31,10 @@ class ArchitecturalGenerator:
         """
         Validates external API credentials against the respective provider API.
         """
+        if provider in ("comfyui", "local"):
+            status = await ComfyUIClient.check_status()
+            return {"valid": status["reachable"], "provider": "Local ComfyUI", "message": status["message"]}
+
         if not api_key or not api_key.strip():
             return {"valid": False, "provider": provider, "message": "API key cannot be empty"}
 
@@ -205,9 +209,17 @@ class ArchitecturalGenerator:
         model_name_label = None
         model_version_label = None
         used_seed = None
+        local_aspect = None
 
         # Normalize provider selection
         target_provider = preferred_provider.lower().strip()
+
+        # "auto": prefer a configured cloud token, otherwise use local ComfyUI if it is running
+        if target_provider == "auto":
+            has_cloud_key = bool(replicate_token and not replicate_token.strip().startswith("demo")) or \
+                            bool(hf_key and not hf_key.startswith("demo"))
+            if not has_cloud_key and (await ComfyUIClient.check_status())["reachable"]:
+                target_provider = "comfyui"
 
         # Check deterministic generation cache (for fixed seeds > 0)
         cache_key = None
@@ -358,6 +370,8 @@ class ArchitecturalGenerator:
                 save_path=str(render_path)
             )
             used_seed = comfy["seed"]
+            resolution = f"{comfy['width']}x{comfy['height']}"
+            local_aspect = f"{comfy['width']}:{comfy['height']}"
             active_provider = "Local ComfyUI (SD 1.5 + ControlNet Canny)"
             model_name_label = "SD 1.5 + ControlNet Canny (local ComfyUI)"
             model_version_label = settings.comfyui_checkpoint
@@ -381,6 +395,9 @@ class ArchitecturalGenerator:
                 _, _, aspect_ratio, _ = ImageProcessor.select_sdxl_bucket(ew, eh)
         except Exception:
             pass
+
+        if local_aspect:
+            aspect_ratio = local_aspect
 
         res_data = {
             "render_id": gen_id,

@@ -153,7 +153,7 @@ export const ProjectsGallery: React.FC<ProjectsGalleryProps> = ({
             <p className="text-xs text-slate-500 mt-1">
               {search || buildingType !== 'All' || favoritesOnly
                 ? 'Try clearing your search filters to see all projects.'
-                : 'Upload an architectural concept sketch in the studio to generate your first photoreal render.'}
+                : 'Upload an architectural concept sketch in the studio to generate your first render.'}
             </p>
           </div>
           <button

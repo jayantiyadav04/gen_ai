@@ -148,8 +148,13 @@ def run_audit_scenarios():
     print(f"  • Default provider: {cfg_res['default_provider']}")
     print(f"  • Is Demo Mode: {cfg_res['is_demo_mode']}")
     print(f"  • Provider label: {cfg_res['active_provider_label']}")
-    assert cfg_res["is_demo_mode"] is True
-    assert "Demo" in cfg_res["active_provider_label"]
+    if cfg_res["default_provider"] in ("comfyui", "local"):
+        # Local ComfyUI needs no credentials and is labelled honestly as a local engine
+        assert cfg_res["is_demo_mode"] is False
+        assert "ComfyUI" in cfg_res["active_provider_label"]
+    else:
+        assert cfg_res["is_demo_mode"] is True
+        assert "Demo" in cfg_res["active_provider_label"]
     results.append(("SCENARIO 7: Uncredentialed Fallback & Transparency", True, "Explicitly flags demo mode; does not deceitfully claim live GPU"))
 
     # SCENARIO 8: Generate image, refresh/revisit project history

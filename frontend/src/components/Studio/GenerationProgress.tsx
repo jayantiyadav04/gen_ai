@@ -4,6 +4,7 @@ import { Sparkles, CheckCircle2, Clock, Cpu, Download, Eye, Layers } from 'lucid
 interface GenerationProgressProps {
   isGenerating: boolean;
   providerLabel?: string;
+  isLocal?: boolean;
 }
 
 const REAL_PIPELINE_PHASES = [
@@ -16,22 +17,22 @@ const REAL_PIPELINE_PHASES = [
   },
   {
     phase: 'Submission',
-    title: 'Cloud GPU Initialization',
-    detail: 'Transmitting structural conditioning tensors and architectural prompt to Replicate',
+    title: 'Sending Job to the AI Engine',
+    detail: 'Sending the edge map and the prompt to the image generation engine',
     icon: Cpu,
     minTime: 2,
   },
   {
     phase: 'Inference',
-    title: 'SDXL ControlNet Diffusion',
-    detail: 'Executing 30 denoising iterations guided by extracted edge conditioning latents',
+    title: 'Stable Diffusion + ControlNet',
+    detail: 'Generating the image step by step, guided by the sketch edge map',
     icon: Sparkles,
     minTime: 6,
   },
   {
     phase: 'Downloading',
-    title: 'Retrieving Photorealistic Render',
-    detail: 'Downloading high-resolution rendered image from delivery CDN and validating integrity',
+    title: 'Retrieving the Render',
+    detail: 'Downloading the finished image and checking that it is valid',
     icon: Download,
     minTime: 18,
   },
@@ -44,9 +45,13 @@ const REAL_PIPELINE_PHASES = [
   },
 ];
 
+// Local generation on a laptop takes minutes, so the later phases must not be shown after a few seconds.
+const LOCAL_PHASE_START = [0, 2, 5, 100000, 100000];
+
 export const GenerationProgress: React.FC<GenerationProgressProps> = ({
   isGenerating,
   providerLabel,
+  isLocal,
 }) => {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
@@ -67,7 +72,8 @@ export const GenerationProgress: React.FC<GenerationProgressProps> = ({
 
   // Determine active phase based on elapsed real-world time
   const currentPhaseIndex = REAL_PIPELINE_PHASES.reduce((acc, stage, idx) => {
-    if (elapsedSeconds >= stage.minTime) return idx;
+    const start = isLocal ? LOCAL_PHASE_START[idx] : stage.minTime;
+    if (elapsedSeconds >= start) return idx;
     return acc;
   }, 0);
 
@@ -95,7 +101,7 @@ export const GenerationProgress: React.FC<GenerationProgressProps> = ({
               </h4>
             </div>
             <p className="text-xs text-slate-500 font-mono mt-0.5">
-              {providerLabel || 'Active Cloud AI Pipeline'} &bull; Phase {currentPhaseIndex + 1} of 5
+              {providerLabel || 'Active AI Pipeline'} &bull; Phase {currentPhaseIndex + 1} of 5
             </p>
           </div>
         </div>
@@ -110,7 +116,10 @@ export const GenerationProgress: React.FC<GenerationProgressProps> = ({
       {/* Dynamic Animated Status Description */}
       <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-600 flex items-center gap-2">
         <span className="font-semibold text-navy-900">Current Action:</span>
-        <span className="text-slate-700">{activePhase.detail}</span>
+        <span className="text-slate-700">
+          {activePhase.detail}
+          {isLocal && currentPhaseIndex === 2 ? ' (running on this computer, usually 1-3 minutes; the first run is slower)' : ''}
+        </span>
       </div>
 
       {/* Stepper feedback across all 5 genuine pipeline stages */}

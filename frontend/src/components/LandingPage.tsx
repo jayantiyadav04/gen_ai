@@ -23,12 +23,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate, onOpenArch
             </div>
 
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-navy-900 font-sans leading-[1.1]">
-              Sketch to <span className="text-transparent bg-clip-text bg-gradient-to-r from-arch-blue via-arch-cyan to-teal-500">Photoreal</span> Campus Architecture
+              Sketch to <span className="text-transparent bg-clip-text bg-gradient-to-r from-arch-blue via-arch-cyan to-teal-500">Realistic Render</span> Campus Architecture
             </h1>
 
             <p className="text-base sm:text-lg text-slate-600 leading-relaxed max-w-xl">
               Turn rough architectural elevations, building concepts, and campus masterplans
-              into stunning photorealistic visualizations in seconds—preserving structural geometry
+              into realistic concept renders with Stable Diffusion and ControlNet, preserving the structural geometry
               for university management, board reviews, and donor presentations.
             </p>
 
@@ -63,7 +63,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate, onOpenArch
               </div>
               <div className="flex items-center gap-1.5">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                <span>Board-Ready 4K Resolution</span>
+                <span>Concept-Quality Renders</span>
               </div>
             </div>
           </div>
@@ -109,7 +109,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate, onOpenArch
               Built for Campus Planners & Educational Architects
             </h2>
             <p className="text-sm text-slate-600 leading-relaxed">
-              Campus development committees sketch new facilities daily, but turning these concepts into photorealistic renders for syndicate meetings and capital campaign donors traditionally requires weeks of 3D modeling. CampusVision AI bridges this gap instantly.
+              Campus development committees sketch new facilities daily, but turning these concepts into realistic renders for committee meetings and donor presentations traditionally requires weeks of 3D modeling. CampusVision AI gives a fast first concept image from a simple sketch.
             </p>
           </div>
 

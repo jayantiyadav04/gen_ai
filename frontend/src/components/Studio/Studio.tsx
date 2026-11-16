@@ -4,6 +4,7 @@ import { SketchUploader } from './SketchUploader';
 import { PromptBuilderPanel } from './PromptBuilderPanel';
 import { AdvancedControls } from './AdvancedControls';
 import { GenerationProgress } from './GenerationProgress';
+import { isLocalProvider } from '../../utils/provider';
 import { ResultsView } from '../Results/ResultsView';
 import { generateRender } from '../../api/client';
 import { Sparkles, AlertCircle, RefreshCw } from 'lucide-react';
@@ -53,9 +54,9 @@ export const Studio: React.FC<StudioProps> = ({
   );
 
   // Advanced parameters
-  const [controlnetStrength, setControlnetStrength] = useState(0.8);
+  const [controlnetStrength, setControlnetStrength] = useState(0.7);
   const [denoisingStrength, setDenoisingStrength] = useState(0.75);
-  const [guidanceScale, setGuidanceScale] = useState(7.5);
+  const [guidanceScale, setGuidanceScale] = useState(7.0);
   const [seed, setSeed] = useState(-1);
   const [resolution, setResolution] = useState('1024x768');
   const [negativePrompt, setNegativePrompt] = useState(config?.default_negative_prompt || '');
@@ -128,7 +129,7 @@ export const Studio: React.FC<StudioProps> = ({
                 Architectural AI Studio
               </h1>
               <p className="text-xs text-slate-600 mt-1">
-                Upload your concept sketch, configure style & lighting, and diffuse into board-ready photorealism.
+                Upload your concept sketch, choose style & lighting, and generate a realistic concept render.
               </p>
             </div>
 
@@ -140,7 +141,7 @@ export const Studio: React.FC<StudioProps> = ({
                     : 'bg-emerald-50 border-emerald-200 text-emerald-800'
                 }`}
               >
-                {config?.is_demo_mode ? 'Demo Engine (Offline Procedural)' : 'Live Cloud GPU Diffusion'}
+                {config?.is_demo_mode ? 'Demo Engine (Offline Procedural)' : isLocalProvider(config) ? 'Local Stable Diffusion 1.5 + ControlNet' : 'Cloud GPU Diffusion'}
               </span>
             </div>
           </div>
@@ -179,6 +180,7 @@ export const Studio: React.FC<StudioProps> = ({
             guidanceScale={guidanceScale}
             onGuidanceScaleChange={setGuidanceScale}
             seed={seed}
+            isLocal={isLocalProvider(config)}
             onSeedChange={setSeed}
             resolution={resolution}
             onResolutionChange={setResolution}
@@ -191,6 +193,7 @@ export const Studio: React.FC<StudioProps> = ({
             <GenerationProgress
               isGenerating={isGenerating}
               providerLabel={config?.active_provider_label}
+              isLocal={isLocalProvider(config)}
             />
           )}
 
@@ -241,12 +244,12 @@ export const Studio: React.FC<StudioProps> = ({
               {isGenerating ? (
                 <>
                   <RefreshCw className="w-4 h-4 animate-spin text-cyan-300" />
-                  <span>Synthesizing Architectural Render...</span>
+                  <span>Generating Render...</span>
                 </>
               ) : (
                 <>
                   <Sparkles className="w-4 h-4 text-cyan-300 group-hover:scale-110 transition-transform" />
-                  <span>Generate Photorealistic Campus Render</span>
+                  <span>Generate Campus Render</span>
                 </>
               )}
             </button>

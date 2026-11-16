@@ -1,3 +1,4 @@
+import { engineBadge } from '../utils/provider';
 import React from 'react';
 import { ViewTab, AppConfig } from '../types';
 import { Building2, Sparkles, Image as ImageIcon, FolderGit2, Settings, Cpu, Layers } from 'lucide-react';
@@ -39,7 +40,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </span>
               </div>
               <p className="text-[11px] text-arch-muted -mt-0.5 font-medium hidden sm:block">
-                Sketch-to-Photoreal Campus Architecture
+                Sketch-to-Render Campus Architecture
               </p>
             </div>
           </div>
@@ -111,11 +112,11 @@ export const Navbar: React.FC<NavbarProps> = ({
                   ? 'bg-amber-50/80 border-amber-200 text-amber-800 hover:bg-amber-100'
                   : 'bg-emerald-50/80 border-emerald-200 text-emerald-800 hover:bg-emerald-100'
               }`}
-              title="Click to configure Cloud GPU API Keys"
+              title="Click to choose the generation engine"
             >
               <span className={`w-1.5 h-1.5 rounded-full ${config?.is_demo_mode ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`} />
               <span className="hidden sm:inline">
-                {config?.is_demo_mode ? 'Demo Engine' : 'Live Cloud GPU'}
+                {engineBadge(config)}
               </span>
               <Settings className="w-3 h-3 text-slate-400" />
             </button>

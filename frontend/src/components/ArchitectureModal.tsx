@@ -31,15 +31,15 @@ export const ArchitectureModal: React.FC<ArchitectureModalProps> = ({ isOpen, on
       title: 'ControlNet + Image-to-Image Diffusion',
       subtitle: 'Structural Guidance + Generative AI',
       desc: 'Conditioning latents lock in building massing, column positions, floor heights and rooflines. Prompt compiler injects style materials, lighting, and landscape atmosphere without warping geometry.',
-      tech: 'ControlNet Canny • SDXL • Dynamic Prompting',
+      tech: 'ControlNet Canny • Stable Diffusion 1.5 • Prompt Builder',
       color: 'border-cyan-300 bg-cyan-50/60 text-navy-900'
     },
     {
       step: '04',
-      title: 'Photorealistic Campus Render',
-      subtitle: 'Material Synthesis & Illumination',
-      desc: 'Ray-traced glass reflections, natural concrete and timber textures, atmospheric lighting (golden hour, blue hour, morning daylight) and manicured campus landscaping.',
-      tech: 'Global Illumination • 8K Output • Post-Bloom',
+      title: 'Realistic Campus Render',
+      subtitle: 'Materials & Lighting',
+      desc: 'The model adds glass, concrete and timber textures, the chosen lighting (golden hour, dusk, morning daylight) and campus greenery on top of the sketch outline.',
+      tech: 'Local ComfyUI • 768 px output • Concept quality',
       color: 'border-indigo-300 bg-indigo-50/60 text-navy-900'
     },
     {
