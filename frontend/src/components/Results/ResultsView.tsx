@@ -163,24 +163,36 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
               <span className="font-bold text-navy-900">{project.seed}</span>
             </div>
             <div className="flex justify-between py-1 border-b border-canvas-200">
-              <span className="text-slate-500">Resolution:</span>
-              <span className="font-bold text-navy-900">{project.resolution}</span>
+              <span className="text-slate-500">Resolution & Ratio:</span>
+              <span className="font-bold text-navy-900">{project.resolution} ({project.aspect_ratio || '4:3'})</span>
             </div>
             <div className="flex justify-between py-1 border-b border-canvas-200">
               <span className="text-slate-500">Inference Time:</span>
               <span className="font-bold text-emerald-700 flex items-center gap-1">
                 <Clock className="w-3 h-3" /> {project.inference_time_sec}s
+                {project.cache_hit && (
+                  <span className="ml-1 text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                    ⚡ Cached
+                  </span>
+                )}
               </span>
             </div>
           </div>
 
-          {/* Provider Badge */}
-          <div className="pt-2">
+          {/* Provider & Model Badge */}
+          <div className="pt-2 space-y-2">
             <div className="p-2.5 rounded-lg bg-canvas-100 border border-canvas-200 text-xs text-slate-700 flex items-start gap-2">
               <Cpu className="w-4 h-4 text-arch-cyan shrink-0 mt-0.5" />
               <div>
-                <p className="font-semibold text-navy-900 font-sans">Active Engine</p>
-                <p className="text-[11px] font-mono text-slate-600 mt-0.5">{project.provider}</p>
+                <p className="font-semibold text-navy-900 font-sans">Active Engine & Model</p>
+                <p className="text-[11px] font-mono text-slate-700 font-bold mt-0.5">
+                  {project.model_name || project.provider}
+                </p>
+                {project.model_version && (
+                  <p className="text-[9px] font-mono text-slate-500 truncate max-w-[200px]">
+                    v: {project.model_version.slice(0, 16)}...
+                  </p>
+                )}
               </div>
             </div>
           </div>

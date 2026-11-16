@@ -79,7 +79,7 @@ export const Studio: React.FC<StudioProps> = ({
     });
   };
 
-  const handleGenerate = async () => {
+  const handleGenerate = async (providerOverride?: string) => {
     setGenerationError(null);
     setIsGenerating(true);
 
@@ -97,6 +97,8 @@ export const Studio: React.FC<StudioProps> = ({
         guidance_scale: guidanceScale,
         seed,
         resolution,
+        negative_prompt: negativePrompt,
+        provider: providerOverride,
         title: `${buildingType} — ${style}`,
       });
 
@@ -194,11 +196,37 @@ export const Studio: React.FC<StudioProps> = ({
 
           {/* Error notice */}
           {generationError && (
-            <div className="p-3.5 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-800 flex items-start gap-2.5">
-              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-              <div>
-                <p className="font-semibold">Generation encountered an error:</p>
-                <p className="mt-0.5">{generationError}</p>
+            <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+              <div className="flex items-start gap-2.5">
+                <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-bold text-rose-900 text-sm">AI Pipeline Error</p>
+                  <p className="mt-0.5 leading-relaxed text-rose-800">{generationError}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleGenerate()}
+                  className="px-3.5 py-2 rounded-lg bg-arch-blue text-white font-semibold text-xs hover:bg-blue-700 transition-colors shadow-xs flex items-center gap-1"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Retry</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={onOpenSettings}
+                  className="px-3.5 py-2 rounded-lg bg-white border border-rose-300 text-rose-900 font-semibold text-xs hover:bg-rose-100 transition-colors shadow-xs"
+                >
+                  Configure API Token
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleGenerate('demo')}
+                  className="px-3.5 py-2 rounded-lg bg-navy-900 text-white font-semibold text-xs hover:bg-navy-800 transition-colors shadow-xs"
+                >
+                  Run Demo Simulation
+                </button>
               </div>
             </div>
           )}
@@ -206,7 +234,7 @@ export const Studio: React.FC<StudioProps> = ({
           {/* Master Generate Action Button */}
           <div className="pt-2 flex justify-end">
             <button
-              onClick={handleGenerate}
+              onClick={() => handleGenerate()}
               disabled={isGenerating}
               className="w-full sm:w-auto px-8 py-3.5 rounded-xl font-bold text-sm text-white bg-gradient-to-r from-navy-900 to-arch-blue hover:from-navy-800 hover:to-blue-700 shadow-elevated transition-all flex items-center justify-center gap-2.5 disabled:opacity-50 disabled:cursor-not-allowed group"
             >

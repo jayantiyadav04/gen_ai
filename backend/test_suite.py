@@ -81,7 +81,18 @@ def run_all_tests():
     print(f"    • Dimensions: {proc['width']}x{proc['height']}, Edge density: {proc['edge_density']}")
     
     # 6. Core Image-to-Image Generation endpoint
-    print("\n[6/9] Testing POST /api/generate (Core GenAI Pipeline)...")
+    print("\n[6/9] Testing POST /api/generate (Verify honest error handling & explicit demo mode)...")
+    # 6a. Verify honest error trapping when unauthenticated (No silent fallback)
+    unauth_payload = {
+        "sketch_id": proc["sketch_id"],
+        "user_prompt": "Modern university academic block",
+        "provider": "replicate"
+    }
+    unauth_res = client.post("/api/generate", json=unauth_payload)
+    assert unauth_res.status_code in [400, 401], f"Expected 400/401, got {unauth_res.status_code}"
+    print(f"  ✓ Honest error reporting confirmed (HTTP {unauth_res.status_code}): No silent fallback.")
+
+    # 6b. Explicit demo mode test
     gen_payload = {
         "sketch_id": proc["sketch_id"],
         "user_prompt": "Modern university academic block with fair-faced concrete and morning sunlight",
@@ -94,6 +105,7 @@ def run_all_tests():
         "guidance_scale": 7.5,
         "seed": 42,
         "resolution": "1024x768",
+        "provider": "demo",
         "title": "Test Academic Block Render"
     }
     t0 = time.time()

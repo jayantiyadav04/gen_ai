@@ -1,11 +1,44 @@
+# Virtual Environment
 venv/
+.venv/
+env/
+ENV/
+
+# Python Cache & Bytecode
 __pycache__/
+*.py[cod]
+*$py.class
 *.pyc
 *.pyo
 *.pyd
 .Python
+
+# SQLite Database
 *.db
+*.db-journal
+
+# Runtime Uploads, Cache & Generated Outputs
+backend/cache/
+backend/uploads/*
+!backend/uploads/.gitkeep
+backend/generated/*
+!backend/generated/.gitkeep
+
+# Node & Frontend Build
 node_modules/
+frontend/node_modules/
+frontend/dist/
 dist/
+
+# OS and Environment
 .DS_Store
 *.log
+.env
+.env.local
+.env.*.local
+backend/.env
+
+# Temporary & Backups
+backend_backup/
+frontend.zip
+*.tmp

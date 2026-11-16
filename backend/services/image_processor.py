@@ -1,13 +1,46 @@
 import os
+import time
 import uuid
 from pathlib import Path
-from typing import Tuple, Dict, Any
+from typing import Tuple, Dict, Any, Optional, List
 import cv2
 import numpy as np
 from PIL import Image
+
 from backend.config import UPLOAD_DIR, settings
+from backend.services.cache import global_cache, CampusVisionCache
+
+# Officially trained SDXL Native Aspect-Ratio Buckets
+SDXL_ASPECT_RATIO_BUCKETS: List[Tuple[int, int, str, str]] = [
+    (1024, 1024, "1:1", "Square Architectural Quad"),
+    (1152, 896, "4:3", "Landscape Standard Academic Block"),
+    (1216, 832, "3:2", "Landscape Classic Elevation"),
+    (1344, 768, "16:9", "Widescreen Campus Panoramic"),
+    (1536, 640, "21:9", "Ultra-wide Masterplan Vista"),
+    (896, 1152, "3:4", "Portrait Institutional Atrium"),
+    (832, 1216, "2:3", "Vertical Campus Belltower"),
+    (768, 1344, "9:16", "Vertical High-Rise Elevation"),
+]
 
 class ImageProcessor:
+    @staticmethod
+    def select_sdxl_bucket(width: int, height: int) -> Tuple[int, int, str, str]:
+        """
+        Determines the optimal native SDXL diffusion resolution bucket
+        that best preserves the input sketch's natural architectural aspect ratio.
+        """
+        ratio = width / max(1, height)
+        best_bucket = SDXL_ASPECT_RATIO_BUCKETS[0]
+        min_diff = float("inf")
+        
+        for bw, bh, rat_str, label in SDXL_ASPECT_RATIO_BUCKETS:
+            diff = abs((bw / bh) - ratio)
+            if diff < min_diff:
+                min_diff = diff
+                best_bucket = (bw, bh, rat_str, label)
+                
+        return best_bucket
+
     @staticmethod
     def validate_and_save(file_bytes: bytes, filename: str) -> Dict[str, Any]:
         """Validates uploaded image and saves it to the uploads directory."""
@@ -34,8 +67,8 @@ class ImageProcessor:
         save_path = UPLOAD_DIR / safe_name
         img.save(save_path)
         
-        # Now run OpenCV edge preprocessing
-        proc_result = ImageProcessor.process_sketch(str(save_path), file_id)
+        # Now run multi-resolution OpenCV edge preprocessing with caching
+        proc_result = ImageProcessor.process_sketch(str(save_path), file_id, file_bytes=file_bytes)
         
         return {
             "sketch_id": file_id,
@@ -45,54 +78,91 @@ class ImageProcessor:
             "blueprint_url": proc_result["blueprint_url"],
             "width": proc_result["width"],
             "height": proc_result["height"],
-            "edge_density": proc_result["edge_density"]
+            "aspect_ratio": proc_result.get("aspect_ratio", "4:3"),
+            "aspect_label": proc_result.get("aspect_label", "Standard"),
+            "edge_density": proc_result["edge_density"],
+            "cache_hit": proc_result.get("cache_hit", False)
         }
 
     @staticmethod
     def process_sketch(
         image_path: str,
         file_id: str,
-        low_threshold: int = 100,
-        high_threshold: int = 200
+        low_threshold: Optional[int] = None,
+        high_threshold: Optional[int] = None,
+        file_bytes: Optional[bytes] = None
     ) -> Dict[str, Any]:
         """
-        Preprocesses sketch using OpenCV:
-        1. Grayscale & Noise reduction (bilateral filter to preserve architectural edges)
-        2. Canny Edge Detection (conditioned for ControlNet - white edges on black background)
-        3. Architectural blueprint edge overlay for UI inspection
+        Advanced Multi-Resolution OpenCV Architectural Preprocessor with Deterministic Caching:
+        1. Selects optimal SDXL native aspect-ratio bucket (1:1, 4:3, 16:9, 21:9, etc.)
+        2. Fits sketch without distortion using clean architectural letterboxing
+        3. Contrast-Limited Adaptive Histogram Equalization (CLAHE) to reveal subtle pencil strokes
+        4. Bilateral line-preserving noise filtration
+        5. Luminance-adaptive Canny edge extraction with morphological lineart dilation
+        6. Blueprint visualization overlay with coordinate grid
         """
+        t0 = time.time()
+        
+        if file_bytes is None and os.path.exists(image_path):
+            with open(image_path, "rb") as f:
+                file_bytes = f.read()
+
         img_bgr = cv2.imread(image_path)
         if img_bgr is None:
             raise ValueError("Failed to read image with OpenCV")
             
-        h, w = img_bgr.shape[:2]
+        orig_h, orig_w = img_bgr.shape[:2]
         
-        # Constrain dimensions to optimal aspect ratio and multiples of 64
-        max_dim = 1280
-        if max(h, w) > max_dim:
-            scale = max_dim / max(h, w)
-            new_w = int(w * scale // 64 * 64)
-            new_h = int(h * scale // 64 * 64)
-            img_bgr = cv2.resize(img_bgr, (new_w, new_h), interpolation=cv2.INTER_AREA)
-            h, w = img_bgr.shape[:2]
+        # 1. Multi-Resolution Aspect Ratio Selection
+        target_w, target_h, aspect_str, aspect_label = ImageProcessor.select_sdxl_bucket(orig_w, orig_h)
+        
+        # Check deterministic preprocessing cache
+        if file_bytes:
+            cache_key = CampusVisionCache.hash_preproc(file_bytes, low_threshold, high_threshold, aspect_str)
+            cached_result = global_cache.get_preproc(cache_key)
+            if cached_result:
+                # Return cached paths but link to current file_id
+                return {
+                    **cached_result,
+                    "cache_hit": True
+                }
+
+        # 2. Aspect-Ratio Preserving Resize & Letterbox (Zero Distortion)
+        scale = min(target_w / orig_w, target_h / orig_h)
+        scaled_w = int(orig_w * scale)
+        scaled_h = int(orig_h * scale)
+        
+        resized_sketch = cv2.resize(img_bgr, (scaled_w, scaled_h), interpolation=cv2.INTER_AREA)
+        
+        # Place centered onto target canvas with pure paper-white background
+        canvas = np.ones((target_h, target_w, 3), dtype=np.uint8) * 255
+        x_offset = (target_w - scaled_w) // 2
+        y_offset = (target_h - scaled_h) // 2
+        canvas[y_offset:y_offset + scaled_h, x_offset:x_offset + scaled_w] = resized_sketch
+        
+        # 3. Convert to grayscale & CLAHE enhancement
+        gray = cv2.cvtColor(canvas, cv2.COLOR_BGR2GRAY)
+        clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
+        enhanced = clahe.apply(gray)
+        
+        # 4. Bilateral filter preserves sharp building boundaries while smoothing grain
+        blurred = cv2.bilateralFilter(enhanced, d=7, sigmaColor=75, sigmaSpace=75)
+        
+        # 5. Dynamic luminance-adaptive Canny calculation
+        if low_threshold is None or high_threshold is None:
+            # Calculate median intensity inside the sketch region
+            roi = blurred[y_offset:y_offset + scaled_h, x_offset:x_offset + scaled_w]
+            med = float(np.median(roi)) if roi.size > 0 else 128.0
+            sigma = 0.33
+            low_thresh = int(max(30, (1.0 - sigma) * med))
+            high_thresh = int(min(220, (1.0 + sigma) * med))
+        else:
+            low_thresh = low_threshold
+            high_thresh = high_threshold
             
-        # Convert to grayscale
-        gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+        edges = cv2.Canny(blurred, low_thresh, high_thresh)
         
-        # Bilateral filter smoothens textures while preserving sharp architectural lines
-        blurred = cv2.bilateralFilter(gray, d=7, sigmaColor=75, sigmaSpace=75)
-        
-        # Invert if the drawing is dark-on-white vs white-on-dark
-        mean_val = np.mean(blurred)
-        if mean_val > 127:
-            # Typical paper sketch: black pencil on white paper
-            # Invert for morphological line analysis
-            pass
-            
-        # Canny edge detection
-        edges = cv2.Canny(blurred, low_threshold, high_threshold)
-        
-        # Slight dilation to ensure clean ControlNet guidance lines
+        # 6. Morphological lineart dilation for crisp ControlNet line conditioning
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
         dilated_edges = cv2.dilate(edges, kernel, iterations=1)
         
@@ -100,17 +170,17 @@ class ImageProcessor:
         edge_save_path = UPLOAD_DIR / edge_filename
         cv2.imwrite(str(edge_save_path), dilated_edges)
         
-        # Create Architectural Blueprint Inspection Map:
-        # Dark navy background (#0B132B) with vibrant cyan lines (#00E5FF) and grid lines
-        blueprint = np.zeros((h, w, 3), dtype=np.uint8)
+        # 7. Create Architectural Blueprint Inspection Map
+        # Navy blue drafting background (#0B132B) with cyan lines (#00E5FF) and coordinate grid
+        blueprint = np.zeros((target_h, target_w, 3), dtype=np.uint8)
         blueprint[:] = (43, 19, 11)  # BGR for #0B132B
         
-        # Add subtle architectural coordinate grid (every 64 px)
+        # Architectural grid (every 64 px)
         grid_overlay = blueprint.copy()
-        for x in range(0, w, 64):
-            cv2.line(grid_overlay, (x, 0), (x, h), (70, 35, 20), 1)
-        for y in range(0, h, 64):
-            cv2.line(grid_overlay, (0, y), (w, y), (70, 35, 20), 1)
+        for x in range(0, target_w, 64):
+            cv2.line(grid_overlay, (x, 0), (x, target_h), (75, 38, 22), 1)
+        for y in range(0, target_h, 64):
+            cv2.line(grid_overlay, (0, y), (target_w, y), (75, 38, 22), 1)
         blueprint = cv2.addWeighted(blueprint, 0.7, grid_overlay, 0.3, 0)
         
         # Paint edges in glowing cyan (BGR: 255, 229, 0)
@@ -120,14 +190,29 @@ class ImageProcessor:
         bp_save_path = UPLOAD_DIR / bp_filename
         cv2.imwrite(str(bp_save_path), blueprint)
         
-        edge_density = float(np.sum(edges > 0) / (h * w))
+        edge_density = float(np.sum(edges > 0) / (target_h * target_w))
+        duration_ms = (time.time() - t0) * 1000
         
-        return {
+        result = {
             "edge_path": str(edge_save_path),
             "edge_url": f"/uploads/{edge_filename}",
+            "blueprint_path": str(bp_save_path),
             "blueprint_url": f"/uploads/{bp_filename}",
-            "width": w,
-            "height": h,
-            "edge_density": round(edge_density, 4)
+            "width": target_w,
+            "height": target_h,
+            "aspect_ratio": aspect_str,
+            "aspect_label": aspect_label,
+            "original_width": orig_w,
+            "original_height": orig_h,
+            "content_box": [x_offset, y_offset, scaled_w, scaled_h],
+            "edge_density": round(edge_density, 4),
+            "low_threshold": low_thresh,
+            "high_threshold": high_thresh,
+            "compute_duration_ms": round(duration_ms, 2),
+            "cache_hit": False
         }
-
+        
+        if file_bytes:
+            global_cache.put_preproc(cache_key, result, duration_ms=duration_ms)
+            
+        return result

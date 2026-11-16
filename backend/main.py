@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 import logging
 from pathlib import Path
 from typing import Optional, Dict, Any, List
@@ -25,7 +26,9 @@ from backend.services.prompt_builder import (
     PromptBuilder, ARCHITECTURAL_STYLES, BUILDING_TYPES, LIGHTING_CONDITIONS, DEFAULT_NEGATIVE_PROMPT
 )
 from backend.services.generator import ArchitecturalGenerator
+from backend.services.comfyui_client import ComfyUIClient
 from backend.services.gallery_data import init_sample_assets, EXAMPLES
+from backend.services.cache import global_cache
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -59,6 +62,10 @@ def on_startup():
 app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 app.mount("/generated", StaticFiles(directory=str(GENERATED_DIR)), name="generated")
 app.mount("/samples", StaticFiles(directory=str(SAMPLES_DIR)), name="samples")
+# History records store sketch/edge URLs as "/backend/uploads/..." - serve those paths too so downloads and comparison views work
+app.mount("/backend/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="backend_uploads")
+app.mount("/backend/samples", StaticFiles(directory=str(SAMPLES_DIR)), name="backend_samples")
+app.mount("/backend/generated", StaticFiles(directory=str(GENERATED_DIR)), name="backend_generated")
 
 # ----------------- Models -----------------
 class BuildPromptRequest(BaseModel):
@@ -81,6 +88,8 @@ class GenerateRequest(BaseModel):
     guidance_scale: float = Field(7.5, ge=1.0, le=20.0)
     seed: int = -1
     resolution: str = "1024x768"
+    negative_prompt: Optional[str] = None
+    provider: Optional[str] = None
     title: Optional[str] = None
 
 class ConfigUpdateRequest(BaseModel):
@@ -88,6 +97,10 @@ class ConfigUpdateRequest(BaseModel):
     replicate_api_token: Optional[str] = None
     fal_key: Optional[str] = None
     default_provider: Optional[str] = None
+
+class TestProviderRequest(BaseModel):
+    provider: str
+    api_key: str
 
 # ----------------- API Endpoints -----------------
 @app.get("/api/health")
@@ -101,20 +114,45 @@ def health():
 
 @app.get("/api/config")
 def get_config():
+    settings.reload()
     hf_key = get_setting("HUGGINGFACE_API_KEY") or settings.huggingface_api_key or os.getenv("HUGGINGFACE_API_KEY", "")
     replicate_token = get_setting("REPLICATE_API_TOKEN") or settings.replicate_api_token or os.getenv("REPLICATE_API_TOKEN", "")
     fal_key = get_setting("FAL_KEY") or settings.fal_key or os.getenv("FAL_KEY", "")
     provider = get_setting("DEFAULT_PROVIDER") or settings.default_provider
 
-    has_live_key = bool(hf_key or replicate_token or fal_key)
+    has_replicate = bool(replicate_token and not replicate_token.strip().startswith("demo"))
+    has_hf = bool(hf_key and not hf_key.strip().startswith("demo"))
+    has_fal = bool(fal_key and not fal_key.strip().startswith("demo"))
+    has_live_key = has_replicate or has_hf or has_fal
+
+    if provider == "demo":
+        active_label = "Demo Simulation Mode (Offline Procedural)"
+        is_demo = True
+    elif provider in ("comfyui", "local"):
+        active_label = "Local ComfyUI (SD 1.5 + ControlNet Canny)"
+        is_demo = False
+    elif has_replicate:
+        active_label = f"Replicate SDXL ControlNet ({settings.replicate_model})"
+        is_demo = False
+    elif has_hf:
+        active_label = "Hugging Face Inference API"
+        is_demo = False
+    elif has_fal:
+        active_label = "Fal.ai Fast SDXL"
+        is_demo = False
+    else:
+        active_label = "Demo Simulation Mode (Configure API Token in Settings for Cloud GPU)"
+        is_demo = True
 
     return {
         "default_provider": provider,
-        "has_huggingface_key": bool(hf_key),
-        "has_replicate_token": bool(replicate_token),
-        "has_fal_key": bool(fal_key),
-        "is_demo_mode": not has_live_key,
-        "active_provider_label": "Hugging Face / Replicate Live GPU" if has_live_key else "Demo Architectural Simulation Mode",
+        "has_huggingface_key": has_hf,
+        "has_replicate_token": has_replicate,
+        "has_fal_key": has_fal,
+        "is_demo_mode": is_demo,
+        "active_provider_label": active_label,
+        "primary_model": settings.replicate_model,
+        "primary_version": settings.replicate_version,
         "styles": list(ARCHITECTURAL_STYLES.keys()),
         "building_types": list(BUILDING_TYPES.keys()),
         "lighting_options": list(LIGHTING_CONDITIONS.keys()),
@@ -133,6 +171,14 @@ def update_config(req: ConfigUpdateRequest):
         save_setting("DEFAULT_PROVIDER", req.default_provider.strip())
 
     return {"status": "success", "message": "Settings updated successfully."}
+
+@app.get("/api/comfyui/status")
+async def comfyui_status():
+    return await ComfyUIClient.check_status()
+
+@app.post("/api/test-provider")
+async def test_provider_endpoint(req: TestProviderRequest):
+    return await ArchitecturalGenerator.test_provider_credentials(req.provider, req.api_key)
 
 @app.post("/api/build-prompt")
 def build_prompt_endpoint(req: BuildPromptRequest):
@@ -221,7 +267,9 @@ async def generate_render_endpoint(req: GenerateRequest):
         denoising_strength=req.denoising_strength,
         guidance_scale=req.guidance_scale,
         seed=req.seed,
-        resolution=req.resolution
+        resolution=req.resolution,
+        negative_prompt_override=req.negative_prompt,
+        provider_override=req.provider
     )
 
     # 3. Determine public sketch & edge URLs
@@ -249,7 +297,11 @@ async def generate_render_endpoint(req: GenerateRequest):
         "resolution": req.resolution,
         "inference_time_sec": gen_result["inference_time_sec"],
         "provider": gen_result["provider"],
-        "is_demo_mode": gen_result["is_demo_mode"]
+        "is_demo_mode": gen_result["is_demo_mode"],
+        "model_name": gen_result.get("model_name", "lucataco/sdxl-controlnet"),
+        "model_version": gen_result.get("model_version", settings.replicate_version),
+        "cache_hit": gen_result.get("cache_hit", False),
+        "aspect_ratio": gen_result.get("aspect_ratio", "4:3")
     })
 
     return {
@@ -257,6 +309,17 @@ async def generate_render_endpoint(req: GenerateRequest):
         "project": project_record,
         "generation": gen_result
     }
+
+@app.get("/api/cache-stats")
+def get_cache_stats():
+    """Returns deterministic preprocessor & generation cache metrics."""
+    return global_cache.get_stats()
+
+@app.post("/api/cache/clear")
+def clear_cache():
+    """Clears the preprocessing and generation cache."""
+    global_cache.clear()
+    return {"status": "success", "message": "Cache successfully cleared."}
 
 @app.get("/api/examples")
 def get_examples():
@@ -315,4 +378,3 @@ if FRONTEND_DIST.exists():
         if file_path.is_file():
             return FileResponse(file_path)
         return FileResponse(FRONTEND_DIST / "index.html")
-

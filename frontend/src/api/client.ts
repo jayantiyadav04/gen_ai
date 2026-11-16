@@ -23,6 +23,19 @@ export async function updateConfig(data: {
   return res.json();
 }
 
+export async function testProvider(
+  provider: string,
+  apiKey: string
+): Promise<{ valid: boolean; provider: string; message: string }> {
+  const res = await fetch(`${API_BASE}/test-provider`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ provider, api_key: apiKey }),
+  });
+  if (!res.ok) throw new Error('Provider test failed');
+  return res.json();
+}
+
 export async function preprocessSketch(file: File): Promise<PreprocessResult> {
   const formData = new FormData();
   formData.append('file', file);

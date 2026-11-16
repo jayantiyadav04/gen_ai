@@ -24,6 +24,10 @@ export interface ArchitecturalProject {
   provider: string;
   is_demo_mode: boolean;
   is_favorite: boolean;
+  model_name?: string;
+  model_version?: string;
+  cache_hit?: boolean;
+  aspect_ratio?: string;
   created_at: string;
 }
 
@@ -51,7 +55,10 @@ export interface PreprocessResult {
   blueprint_url: string;
   width: number;
   height: number;
+  aspect_ratio?: string;
+  aspect_label?: string;
   edge_density: number;
+  cache_hit?: boolean;
 }
 
 export interface AppConfig {
@@ -61,6 +68,8 @@ export interface AppConfig {
   has_fal_key: boolean;
   is_demo_mode: boolean;
   active_provider_label: string;
+  primary_model?: string;
+  primary_version?: string;
   styles: string[];
   building_types: string[];
   lighting_options: string[];
@@ -80,6 +89,8 @@ export interface GenerationParams {
   guidance_scale: number;
   seed: number;
   resolution: string;
+  negative_prompt?: string;
+  provider?: string;
   title?: string;
 }
 
@@ -100,9 +111,13 @@ export interface GenerationResult {
     guidance_scale: number;
     seed: number;
     resolution: string;
+    aspect_ratio?: string;
     inference_time_sec: number;
     provider: string;
     is_demo_mode: boolean;
+    model_name?: string;
+    model_version?: string;
+    cache_hit?: boolean;
     status_message: string;
   };
 }

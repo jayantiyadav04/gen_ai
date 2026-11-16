@@ -349,3 +349,4 @@ export const SketchCanvas: React.FC<SketchCanvasProps> = ({ onSketchDrawn, onCan
     </div>
   );
 };
+

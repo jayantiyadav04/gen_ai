@@ -4,20 +4,148 @@ import uuid
 import base64
 import json
 import logging
+import asyncio
+import socket
 from pathlib import Path
+from io import BytesIO
 from typing import Dict, Any, Optional
 import httpx
 from PIL import Image, ImageFilter
 import cv2
 import numpy as np
+from fastapi import HTTPException
 
 from backend.config import GENERATED_DIR, UPLOAD_DIR, settings
-from backend.services.prompt_builder import PromptBuilder, ARCHITECTURAL_STYLES, LIGHTING_CONDITIONS
+from backend.services.prompt_builder import (
+    PromptBuilder, ARCHITECTURAL_STYLES, LIGHTING_CONDITIONS, BASE_NEGATIVE_PROMPT
+)
+from backend.services.cache import global_cache, CampusVisionCache
 from backend.database import get_setting
+from backend.services.comfyui_client import ComfyUIClient
 
 logger = logging.getLogger("campusvision.generator")
 
 class ArchitecturalGenerator:
+    @staticmethod
+    async def test_provider_credentials(provider: str, api_key: str) -> Dict[str, Any]:
+        """
+        Validates external API credentials against the respective provider API.
+        """
+        if not api_key or not api_key.strip():
+            return {"valid": False, "provider": provider, "message": "API key cannot be empty"}
+
+        key = api_key.strip()
+
+        if provider == "replicate":
+            test_url = "https://api.replicate.com/v1/account"
+            headers = {"Authorization": f"Bearer {key}"}
+            try:
+                async with httpx.AsyncClient(timeout=12.0) as client:
+                    resp = await client.get(test_url, headers=headers)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        user = data.get("username") or data.get("name") or "Replicate User"
+                        return {
+                            "valid": True,
+                            "provider": "Replicate",
+                            "message": f"Successfully authenticated Replicate account '{user}'. Access granted to cloud GPU predictions."
+                        }
+                    elif resp.status_code == 401:
+                        return {
+                            "valid": False,
+                            "provider": "Replicate",
+                            "message": "Replicate authentication failed (HTTP 401): Invalid API token. Please verify the token at replicate.com/account/api-tokens."
+                        }
+                    elif resp.status_code == 402:
+                        return {
+                            "valid": False,
+                            "provider": "Replicate",
+                            "message": "Replicate billing check (HTTP 402): Account has insufficient credits or requires payment setup."
+                        }
+                    elif resp.status_code == 403:
+                        return {
+                            "valid": False,
+                            "provider": "Replicate",
+                            "message": "Replicate access forbidden (HTTP 403): Token lacks permission to access the Replicate API."
+                        }
+                    else:
+                        return {
+                            "valid": False,
+                            "provider": "Replicate",
+                            "message": f"Replicate API error (HTTP {resp.status_code}): {resp.text[:150]}"
+                        }
+            except (socket.gaierror, httpx.ConnectError) as ce:
+                err_text = str(ce)
+                if "nodename nor servname" in err_text or "Errno 8" in err_text:
+                    return {
+                        "valid": False,
+                        "provider": "Replicate",
+                        "message": (
+                            "DNS resolution error: The backend process cannot resolve 'api.replicate.com' ([Errno 8]). "
+                            "This occurs when the backend is running in an environment or sandbox without outbound network access. "
+                            "Please run the backend directly on your host Mac via './start.sh'."
+                        )
+                    }
+                return {
+                    "valid": False,
+                    "provider": "Replicate",
+                    "message": f"Network connection error to api.replicate.com: {err_text}"
+                }
+            except httpx.TimeoutException:
+                return {
+                    "valid": False,
+                    "provider": "Replicate",
+                    "message": "Network timeout: Connection to api.replicate.com timed out."
+                }
+            except Exception as e:
+                return {"valid": False, "provider": "Replicate", "message": f"Connection error: {str(e)}"}
+
+        elif provider in ["huggingface", "hf"]:
+            test_url = "https://huggingface.co/api/whoami-v2"
+            headers = {"Authorization": f"Bearer {key}"}
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.get(test_url, headers=headers)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        user = data.get("name") or data.get("fullname") or "User"
+                        return {
+                            "valid": True,
+                            "provider": "Hugging Face",
+                            "message": f"Successfully authenticated as Hugging Face user '{user}'. Access granted to Inference API."
+                        }
+                    else:
+                        return {
+                            "valid": False,
+                            "provider": "Hugging Face",
+                            "message": f"Authentication failed (HTTP {resp.status_code}): Invalid token or insufficient permissions."
+                        }
+            except Exception as e:
+                return {"valid": False, "provider": "Hugging Face", "message": f"Connection error: {str(e)}"}
+
+        elif provider in ["fal", "fal_ai"]:
+            test_url = "https://fal.run/fal-ai/fast-sdxl/image-to-image"
+            headers = {"Authorization": f"Key {key}", "Content-Type": "application/json"}
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.post(test_url, headers=headers, json={"prompt": "ping"})
+                    if resp.status_code in [200, 422]:
+                        return {
+                            "valid": True,
+                            "provider": "Fal.ai",
+                            "message": "Successfully authenticated with Fal.ai API."
+                        }
+                    else:
+                        return {
+                            "valid": False,
+                            "provider": "Fal.ai",
+                            "message": f"Fal.ai authentication failed (HTTP {resp.status_code}): Invalid key."
+                        }
+            except Exception as e:
+                return {"valid": False, "provider": "Fal.ai", "message": f"Connection error: {str(e)}"}
+
+        return {"valid": False, "provider": provider, "message": f"Unsupported provider: {provider}"}
+
     @staticmethod
     async def generate_render(
         sketch_path: str,
@@ -31,13 +159,15 @@ class ArchitecturalGenerator:
         denoising_strength: float = 0.75,
         guidance_scale: float = 7.5,
         seed: int = -1,
-        resolution: str = "1024x768"
+        resolution: str = "1024x768",
+        negative_prompt_override: Optional[str] = None,
+        provider_override: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Executes the architectural image-to-image pipeline:
         1. Compiles intelligent architectural prompt
-        2. Detects provider (Hugging Face / Replicate / Fal / Demo Mode)
-        3. Generates the photorealistic campus visualization
+        2. Detects provider (Replicate / Hugging Face / Fal / Demo Mode)
+        3. Generates the photorealistic campus visualization using genuine ControlNet conditioning
         4. Saves and returns detailed generation metadata
         """
         start_time = time.time()
@@ -51,87 +181,64 @@ class ArchitecturalGenerator:
             materials=materials
         )
         compiled_prompt = prompt_data["compiled_prompt"]
-        negative_prompt = prompt_data["negative_prompt"]
+        effective_negative_prompt = (
+            negative_prompt_override.strip()
+            if (negative_prompt_override and negative_prompt_override.strip())
+            else prompt_data["negative_prompt"]
+        )
         
         # Check active provider & API keys
+        settings.reload()
         hf_key = get_setting("HUGGINGFACE_API_KEY") or settings.huggingface_api_key or os.getenv("HUGGINGFACE_API_KEY", "")
         replicate_token = get_setting("REPLICATE_API_TOKEN") or settings.replicate_api_token or os.getenv("REPLICATE_API_TOKEN", "")
-        preferred_provider = get_setting("DEFAULT_PROVIDER") or settings.default_provider
+        fal_key = get_setting("FAL_KEY") or settings.fal_key or os.getenv("FAL_KEY", "")
+        
+        preferred_provider = provider_override or get_setting("DEFAULT_PROVIDER") or settings.default_provider
         
         gen_id = str(uuid.uuid4())[:8]
         render_filename = f"{gen_id}_render.png"
         render_path = GENERATED_DIR / render_filename
         
-        is_demo_mode = True
-        active_provider = "Demo Architectural Engine"
+        is_demo_mode = False
+        active_provider = ""
         status_message = ""
-        
-        # If user configured Hugging Face API
-        if (preferred_provider in ["huggingface", "auto"]) and hf_key and not hf_key.startswith("demo"):
-            try:
-                logger.info("Attempting live generation with Hugging Face Inference API...")
-                await ArchitecturalGenerator._generate_with_huggingface(
-                    hf_key=hf_key,
-                    edge_path=edge_path,
-                    prompt=compiled_prompt,
-                    negative_prompt=negative_prompt,
-                    controlnet_strength=controlnet_strength,
-                    guidance_scale=guidance_scale,
-                    save_path=str(render_path)
-                )
-                is_demo_mode = False
-                active_provider = "Hugging Face ControlNet SDXL (Live GPU)"
-                status_message = "Render generated live using Hugging Face Cloud GPU."
-            except Exception as e:
-                logger.warning(f"Hugging Face generation failed: {e}. Falling back to demo simulation engine.")
-                status_message = f"Live HF Cloud GPU unavailable ({str(e)}). Active: Demo Simulation Mode."
-                ArchitecturalGenerator._generate_procedural_photoreal(
-                    sketch_path=sketch_path,
-                    edge_path=edge_path,
-                    style=style,
-                    building_type=building_type,
-                    lighting=lighting,
-                    user_prompt=user_prompt,
-                    save_path=str(render_path)
-                )
-                
-        # If user configured Replicate API
-        elif (preferred_provider in ["replicate", "auto"]) and replicate_token and not replicate_token.startswith("demo"):
-            try:
-                logger.info("Attempting live generation with Replicate API...")
-                await ArchitecturalGenerator._generate_with_replicate(
-                    replicate_token=replicate_token,
-                    edge_path=edge_path,
-                    prompt=compiled_prompt,
-                    negative_prompt=negative_prompt,
-                    controlnet_strength=controlnet_strength,
-                    guidance_scale=guidance_scale,
-                    save_path=str(render_path)
-                )
-                is_demo_mode = False
-                active_provider = "Replicate SDXL ControlNet (Live Cloud)"
-                status_message = "Render generated live via Replicate Cloud API."
-            except Exception as e:
-                logger.warning(f"Replicate generation failed: {e}. Falling back to demo simulation engine.")
-                status_message = f"Live Replicate Cloud unavailable ({str(e)}). Active: Demo Simulation Mode."
-                ArchitecturalGenerator._generate_procedural_photoreal(
-                    sketch_path=sketch_path,
-                    edge_path=edge_path,
-                    style=style,
-                    building_type=building_type,
-                    lighting=lighting,
-                    user_prompt=user_prompt,
-                    save_path=str(render_path)
-                )
-                
-        else:
-            # Demo Simulation Mode
-            is_demo_mode = True
-            active_provider = "Demo Simulation Mode (Add API Key in Settings for Live GPU)"
-            status_message = (
-                "Generated via procedural architectural synthesis engine. "
-                "To run live image-to-image diffusion on cloud GPUs, add a free Hugging Face or Replicate API key in Settings."
+        model_name_label = None
+        model_version_label = None
+        used_seed = None
+
+        # Normalize provider selection
+        target_provider = preferred_provider.lower().strip()
+
+        # Check deterministic generation cache (for fixed seeds > 0)
+        cache_key = None
+        if seed > 0 and os.path.exists(edge_path):
+            with open(edge_path, "rb") as ef:
+                edge_bytes = ef.read()
+            cache_key = CampusVisionCache.hash_generation(
+                edge_bytes=edge_bytes,
+                compiled_prompt=compiled_prompt,
+                negative_prompt=effective_negative_prompt,
+                controlnet_strength=controlnet_strength,
+                guidance_scale=guidance_scale,
+                seed=seed,
+                resolution=resolution,
+                model_version=(settings.replicate_version if target_provider in ["replicate", "auto"]
+                               else ("comfyui-sd15-canny" if target_provider in ["comfyui", "local"] else "demo"))
             )
+            cached_gen = global_cache.get_generation(cache_key)
+            if cached_gen:
+                logger.info(f"Deterministic generation cache hit for key {cache_key[:16]}...")
+                return {
+                    **cached_gen,
+                    "cache_hit": True,
+                    "status_message": "Instant retrieval from deterministic architectural render cache."
+                }
+
+        # -------------------------------------------------------------
+        # BRANCH A: Explicit Demo Simulation Mode
+        # -------------------------------------------------------------
+        if target_provider == "demo":
+            logger.info("Generating in explicit Demo Simulation Mode (procedural synthesis)...")
             ArchitecturalGenerator._generate_procedural_photoreal(
                 sketch_path=sketch_path,
                 edge_path=edge_path,
@@ -141,14 +248,146 @@ class ArchitecturalGenerator:
                 user_prompt=user_prompt,
                 save_path=str(render_path)
             )
-            
+            is_demo_mode = True
+            active_provider = "Demo Architectural Engine (Procedural Simulation)"
+            status_message = (
+                "Generated via procedural geometry synthesis engine for offline demonstration. "
+                "To execute live image-to-image diffusion on cloud GPUs, add a Replicate API token in Settings."
+            )
+
+        # -------------------------------------------------------------
+        # BRANCH B: Replicate (Primary Provider)
+        # -------------------------------------------------------------
+        elif target_provider in ["replicate", "auto"]:
+            # Check for missing credentials
+            if not replicate_token or not replicate_token.strip() or replicate_token.strip().startswith("demo"):
+                # If auto and another provider has key, we can try it, else report missing credentials
+                if target_provider == "auto" and hf_key and not hf_key.startswith("demo"):
+                    # Fallback to Hugging Face if configured
+                    logger.info("Auto-provider: Replicate token missing, switching to configured Hugging Face key...")
+                    await ArchitecturalGenerator._generate_with_huggingface(
+                        hf_key=hf_key,
+                        edge_path=edge_path,
+                        prompt=compiled_prompt,
+                        negative_prompt=effective_negative_prompt,
+                        controlnet_strength=controlnet_strength,
+                        guidance_scale=guidance_scale,
+                        save_path=str(render_path)
+                    )
+                    active_provider = "Hugging Face ControlNet SDXL (Live Cloud GPU)"
+                    status_message = "Photorealistic render generated live using Hugging Face Cloud GPU."
+                else:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            "REPLICATE_API_TOKEN is not configured. "
+                            "Please add your Replicate API token in Settings or define REPLICATE_API_TOKEN in your .env file to run live AI generation. "
+                            "Alternatively, switch to Demo Simulation Mode in Settings for offline testing."
+                        )
+                    )
+            else:
+                logger.info(f"Executing live ControlNet generation via Replicate ({settings.replicate_model})...")
+                await ArchitecturalGenerator._generate_with_replicate(
+                    replicate_token=replicate_token.strip(),
+                    edge_path=edge_path,
+                    prompt=compiled_prompt,
+                    negative_prompt=effective_negative_prompt,
+                    controlnet_strength=controlnet_strength,
+                    guidance_scale=guidance_scale,
+                    seed=seed,
+                    save_path=str(render_path)
+                )
+                active_provider = f"Replicate SDXL ControlNet ({settings.replicate_model})"
+                status_message = "Photorealistic render generated live via Replicate Cloud GPU ControlNet."
+
+        # -------------------------------------------------------------
+        # BRANCH C: Hugging Face (Secondary Provider)
+        # -------------------------------------------------------------
+        elif target_provider in ["huggingface", "hf"]:
+            if not hf_key or not hf_key.strip() or hf_key.strip().startswith("demo"):
+                raise HTTPException(
+                    status_code=400,
+                    detail="HUGGINGFACE_API_KEY is not configured. Please add your Hugging Face API key in Settings or .env."
+                )
+            logger.info("Executing live ControlNet generation via Hugging Face...")
+            await ArchitecturalGenerator._generate_with_huggingface(
+                hf_key=hf_key.strip(),
+                edge_path=edge_path,
+                prompt=compiled_prompt,
+                negative_prompt=effective_negative_prompt,
+                controlnet_strength=controlnet_strength,
+                guidance_scale=guidance_scale,
+                save_path=str(render_path)
+            )
+            active_provider = "Hugging Face ControlNet SDXL (Live Cloud GPU)"
+            status_message = "Photorealistic render generated live via Hugging Face Inference API."
+
+        # -------------------------------------------------------------
+        # BRANCH D: Fal.ai (Secondary Provider)
+        # -------------------------------------------------------------
+        elif target_provider in ["fal", "fal_ai"]:
+            if not fal_key or not fal_key.strip() or fal_key.strip().startswith("demo"):
+                raise HTTPException(
+                    status_code=400,
+                    detail="FAL_KEY is not configured. Please add your Fal.ai API key in Settings or .env."
+                )
+            logger.info("Executing live generation via Fal.ai...")
+            await ArchitecturalGenerator._generate_with_fal(
+                fal_key=fal_key.strip(),
+                sketch_path=sketch_path,
+                prompt=compiled_prompt,
+                negative_prompt=effective_negative_prompt,
+                guidance_scale=guidance_scale,
+                save_path=str(render_path)
+            )
+            active_provider = "Fal.ai Fast SDXL Img2Img (Live Cloud GPU)"
+            status_message = "Photorealistic render generated live via Fal.ai Cloud API."
+
+        # -------------------------------------------------------------
+        # BRANCH E: Local ComfyUI (free, runs on this machine)
+        # -------------------------------------------------------------
+        elif target_provider in ["comfyui", "local"]:
+            logger.info("Executing live ControlNet generation via local ComfyUI (SD 1.5 + ControlNet Canny)...")
+            comfy = await ComfyUIClient.generate(
+                edge_path=edge_path,
+                prompt=compiled_prompt,
+                negative_prompt=effective_negative_prompt,
+                controlnet_strength=controlnet_strength,
+                guidance_scale=guidance_scale,
+                seed=seed,
+                save_path=str(render_path)
+            )
+            used_seed = comfy["seed"]
+            active_provider = "Local ComfyUI (SD 1.5 + ControlNet Canny)"
+            model_name_label = "SD 1.5 + ControlNet Canny (local ComfyUI)"
+            model_version_label = settings.comfyui_checkpoint
+            status_message = f"Photorealistic render generated locally via ComfyUI at {comfy['width']}x{comfy['height']}."
+
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported provider '{preferred_provider}'. Supported: replicate, huggingface, fal, comfyui, demo, auto."
+            )
+
         elapsed = round(time.time() - start_time, 2)
         
-        return {
+        # Calculate aspect ratio based on edge map
+        aspect_ratio = "4:3"
+        try:
+            edge_img = cv2.imread(edge_path)
+            if edge_img is not None:
+                eh, ew = edge_img.shape[:2]
+                from backend.services.image_processor import ImageProcessor
+                _, _, aspect_ratio, _ = ImageProcessor.select_sdxl_bucket(ew, eh)
+        except Exception:
+            pass
+
+        res_data = {
             "render_id": gen_id,
             "render_url": f"/generated/{render_filename}",
+            "render_path": str(render_path),
             "compiled_prompt": compiled_prompt,
-            "negative_prompt": negative_prompt,
+            "negative_prompt": effective_negative_prompt,
             "style": style,
             "building_type": building_type,
             "lighting": lighting,
@@ -156,13 +395,215 @@ class ArchitecturalGenerator:
             "controlnet_strength": controlnet_strength,
             "denoising_strength": denoising_strength,
             "guidance_scale": guidance_scale,
-            "seed": seed if seed != -1 else int(time.time() % 100000),
+            "seed": used_seed if used_seed is not None else (seed if seed != -1 else int(time.time() % 100000)),
             "resolution": resolution,
+            "aspect_ratio": aspect_ratio,
             "inference_time_sec": elapsed,
             "provider": active_provider,
             "is_demo_mode": is_demo_mode,
+            "model_name": model_name_label or (settings.replicate_model if not is_demo_mode else "Procedural Synthesis Engine"),
+            "model_version": model_version_label or (settings.replicate_version if not is_demo_mode else "v2.0"),
+            "cache_hit": False,
             "status_message": status_message
         }
+        
+        # Cache successful deterministic generation
+        if seed > 0 and cache_key:
+            global_cache.put_generation(cache_key, res_data)
+            
+        return res_data
+
+    @staticmethod
+    async def _generate_with_replicate(
+        replicate_token: str,
+        edge_path: str,
+        prompt: str,
+        negative_prompt: str,
+        controlnet_strength: float,
+        guidance_scale: float,
+        seed: int,
+        save_path: str
+    ):
+        """
+        Calls Replicate API for genuine ControlNet Canny image-to-image diffusion.
+        
+        Pipeline:
+        1. Encodes the OpenCV Canny edge map to a base64 data URI.
+        2. Creates prediction against lucataco/sdxl-controlnet with structural conditioning parameters.
+        3. Polls asynchronously with asyncio.sleep(2) until prediction succeeds or fails.
+        4. Validates and downloads generated image bytes directly to local storage.
+        """
+        if not os.path.exists(edge_path):
+            raise HTTPException(
+                status_code=400,
+                detail=f"OpenCV structural edge map not found at '{edge_path}'. Sketch preprocessing required."
+            )
+
+        with open(edge_path, "rb") as f:
+            edge_b64 = base64.b64encode(f.read()).decode("utf-8")
+        data_uri = f"data:image/png;base64,{edge_b64}"
+        
+        headers = {
+            "Authorization": f"Bearer {replicate_token}",
+            "Content-Type": "application/json"
+        }
+
+        # Build payload adhering strictly to lucataco/sdxl-controlnet schema
+        input_payload: Dict[str, Any] = {
+            "image": data_uri,
+            "prompt": prompt,
+            "negative_prompt": negative_prompt or DEFAULT_NEGATIVE_PROMPT,
+            "condition_scale": round(float(controlnet_strength), 2),
+            "guidance_scale": round(float(guidance_scale), 2),
+            "num_inference_steps": 30
+        }
+        if seed is not None and seed > 0:
+            input_payload["seed"] = int(seed)
+
+        create_url = "https://api.replicate.com/v1/predictions"
+        payload = {
+            "version": settings.replicate_version,
+            "input": input_payload
+        }
+        
+        timeout_config = httpx.Timeout(180.0, connect=15.0)
+        async with httpx.AsyncClient(timeout=timeout_config) as client:
+            try:
+                resp = await client.post(create_url, headers=headers, json=payload)
+            except Exception as conn_err:
+                err_text = str(conn_err)
+                if "nodename nor servname" in err_text or "Errno 8" in err_text:
+                    raise HTTPException(
+                        status_code=503,
+                        detail=(
+                            "DNS resolution error: The backend process cannot resolve 'api.replicate.com' ([Errno 8]). "
+                            "The backend is executing in an isolated sandbox or container without outbound network permissions. "
+                            "Please run './start.sh' directly in your Mac terminal so the process has full host network access."
+                        )
+                    )
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"Failed to connect to Replicate API: {err_text}"
+                )
+
+            # Check HTTP response codes from prediction submission
+            if resp.status_code == 401:
+                raise HTTPException(
+                    status_code=401,
+                    detail="Authentication failed: Invalid Replicate API token. Please check your credentials in Settings or .env."
+                )
+            elif resp.status_code == 402:
+                raise HTTPException(
+                    status_code=402,
+                    detail="Replicate billing check: Your Replicate account has insufficient credits or requires payment method setup."
+                )
+            elif resp.status_code == 404:
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"Replicate model version '{settings.replicate_version[:12]}' not found or unavailable."
+                )
+            elif resp.status_code == 422:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Replicate schema validation error: {resp.text[:300]}"
+                )
+            elif resp.status_code == 429:
+                raise HTTPException(
+                    status_code=429,
+                    detail="Replicate rate limit exceeded. Please wait a moment before initiating another generation."
+                )
+            elif resp.status_code not in [200, 201]:
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"Replicate API error (HTTP {resp.status_code}): {resp.text[:300]}"
+                )
+
+            pred = resp.json()
+            pred_id = pred.get("id")
+            poll_url = pred.get("urls", {}).get("get") or f"https://api.replicate.com/v1/predictions/{pred_id}"
+            
+            logger.info(f"Replicate prediction created: {pred_id}. Polling {poll_url}...")
+
+            max_polls = max(15, settings.replicate_poll_timeout // 2)
+            for poll_idx in range(max_polls):
+                # Correct non-blocking async sleep
+                await asyncio.sleep(2)
+                
+                try:
+                    p_resp = await client.get(poll_url, headers=headers)
+                except Exception as poll_err:
+                    logger.warning(f"Replicate poll error at step {poll_idx}: {poll_err}")
+                    continue
+
+                if p_resp.status_code == 401:
+                    raise HTTPException(
+                        status_code=401,
+                        detail="Replicate authentication failed during status polling."
+                    )
+                elif p_resp.status_code != 200:
+                    logger.warning(f"Replicate poll returned HTTP {p_resp.status_code}")
+                    continue
+
+                p_data = p_resp.json()
+                status = p_data.get("status")
+
+                if status == "succeeded":
+                    output = p_data.get("output")
+                    if isinstance(output, list) and len(output) > 0:
+                        out_url = output[0]
+                    elif isinstance(output, str):
+                        out_url = output
+                    else:
+                        raise HTTPException(
+                            status_code=502,
+                            detail="Replicate reported success but returned an empty output array."
+                        )
+
+                    logger.info(f"Replicate prediction {pred_id} succeeded. Downloading generated image from {out_url[:60]}...")
+                    
+                    # Download generated image with timeout
+                    img_resp = await client.get(out_url, timeout=45.0)
+                    if img_resp.status_code != 200:
+                        raise HTTPException(
+                            status_code=502,
+                            detail=f"Failed to download generated render from Replicate CDN (HTTP {img_resp.status_code})."
+                        )
+                    
+                    # Validate image bytes
+                    try:
+                        pil_img = Image.open(BytesIO(img_resp.content))
+                        pil_img.verify()
+                    except Exception as val_err:
+                        raise HTTPException(
+                            status_code=502,
+                            detail=f"Downloaded file from Replicate is not a valid image: {str(val_err)}"
+                        )
+
+                    # Re-open and save safely
+                    pil_img = Image.open(BytesIO(img_resp.content))
+                    pil_img.save(save_path, "PNG", quality=95)
+                    logger.info(f"Successfully saved Replicate render to {save_path}")
+                    return
+
+                elif status == "failed":
+                    error_msg = p_data.get("error") or "Unknown error during cloud diffusion"
+                    logger.error(f"Replicate prediction {pred_id} failed: {error_msg}")
+                    raise HTTPException(
+                        status_code=502,
+                        detail=f"Replicate Cloud GPU generation failed: {error_msg}"
+                    )
+
+                elif status == "canceled":
+                    raise HTTPException(
+                        status_code=499,
+                        detail="Replicate prediction was canceled."
+                    )
+
+            # Polling timed out
+            raise HTTPException(
+                status_code=504,
+                detail=f"Replicate generation timed out after {settings.replicate_poll_timeout} seconds."
+            )
 
     @staticmethod
     async def _generate_with_huggingface(
@@ -175,12 +616,18 @@ class ArchitecturalGenerator:
         save_path: str
     ):
         """Calls Hugging Face Inference API for ControlNet / SDXL image generation."""
-        # Read edge image and encode to base64
+        if not os.path.exists(edge_path):
+            raise HTTPException(status_code=400, detail="Canny edge map not found.")
+
         with open(edge_path, "rb") as f:
-            edge_bytes = f.read()
-            edge_b64 = base64.b64encode(edge_bytes).decode("utf-8")
+            edge_b64 = base64.b64encode(f.read()).decode("utf-8")
             
-        endpoint = "https://api-inference.huggingface.co/models/diffusers/controlnet-canny-sdxl-1.0"
+        endpoints = [
+            "https://router.huggingface.co/hf-inference/models/diffusers/controlnet-canny-sdxl-1.0",
+            "https://api-inference.huggingface.co/models/diffusers/controlnet-canny-sdxl-1.0",
+            "https://router.huggingface.co/hf-inference/models/stabilityai/stable-diffusion-xl-base-1.0"
+        ]
+        
         headers = {
             "Authorization": f"Bearer {hf_key}",
             "Content-Type": "application/json"
@@ -197,66 +644,90 @@ class ArchitecturalGenerator:
             }
         }
         
+        last_error = None
         async with httpx.AsyncClient(timeout=120.0) as client:
-            resp = await client.post(endpoint, headers=headers, json=payload)
-            if resp.status_code != 200:
-                raise ValueError(f"Hugging Face API returned status {resp.status_code}: {resp.text[:200]}")
-            with open(save_path, "wb") as out_f:
-                out_f.write(resp.content)
+            for ep in endpoints:
+                try:
+                    resp = await client.post(ep, headers=headers, json=payload)
+                    if resp.status_code == 200:
+                        try:
+                            pil_test = Image.open(BytesIO(resp.content))
+                            pil_test.verify()
+                        except Exception as e:
+                            last_error = f"Invalid image returned from HF: {e}"
+                            continue
+                        with open(save_path, "wb") as out_f:
+                            out_f.write(resp.content)
+                        return
+                    elif resp.status_code == 401:
+                        raise HTTPException(
+                            status_code=401,
+                            detail="Hugging Face authentication failed: Invalid API key."
+                        )
+                    elif resp.status_code == 429:
+                        raise HTTPException(
+                            status_code=429,
+                            detail="Hugging Face rate limit exceeded. Please wait a moment."
+                        )
+                    else:
+                        last_error = f"HF {ep} returned HTTP {resp.status_code}: {resp.text[:150]}"
+                except HTTPException:
+                    raise
+                except Exception as ex:
+                    last_error = str(ex)
+                    
+        raise HTTPException(
+            status_code=502,
+            detail=f"Hugging Face Inference call failed: {last_error or 'Unknown error'}"
+        )
 
     @staticmethod
-    async def _generate_with_replicate(
-        replicate_token: str,
-        edge_path: str,
+    async def _generate_with_fal(
+        fal_key: str,
+        sketch_path: str,
         prompt: str,
         negative_prompt: str,
-        controlnet_strength: float,
         guidance_scale: float,
         save_path: str
     ):
-        """Calls Replicate API for ControlNet generation."""
-        with open(edge_path, "rb") as f:
-            edge_b64 = base64.b64encode(f.read()).decode("utf-8")
-        data_uri = f"data:image/png;base64,{edge_b64}"
+        """Calls Fal.ai API for fast SDXL image-to-image generation."""
+        if not os.path.exists(sketch_path):
+            raise HTTPException(status_code=400, detail="Sketch image file not found.")
+
+        with open(sketch_path, "rb") as f:
+            sketch_b64 = base64.b64encode(f.read()).decode("utf-8")
+        data_uri = f"data:image/png;base64,{sketch_b64}"
         
         headers = {
-            "Authorization": f"Token {replicate_token}",
+            "Authorization": f"Key {fal_key}",
             "Content-Type": "application/json"
         }
         
-        # Create prediction
-        create_url = "https://api.replicate.com/v1/predictions"
+        endpoint = "https://fal.run/fal-ai/fast-sdxl/image-to-image"
         payload = {
-            "version": "da77bc59ee60423279fd632ef007f5f0f3d9e8c145fe82bd3d00f899e502a430",
-            "input": {
-                "image": data_uri,
-                "prompt": prompt,
-                "negative_prompt": negative_prompt,
-                "condition_scale": controlnet_strength,
-                "guidance_scale": guidance_scale
-            }
+            "image_url": data_uri,
+            "prompt": prompt,
+            "negative_prompt": negative_prompt,
+            "guidance_scale": guidance_scale,
+            "strength": 0.70
         }
         
         async with httpx.AsyncClient(timeout=120.0) as client:
-            resp = await client.post(create_url, headers=headers, json=payload)
-            if resp.status_code not in [200, 201]:
-                raise ValueError(f"Replicate API error: {resp.text[:200]}")
-            pred = resp.json()
-            poll_url = pred["urls"]["get"]
+            resp = await client.post(endpoint, headers=headers, json=payload)
+            if resp.status_code == 401:
+                raise HTTPException(status_code=401, detail="Fal.ai authentication failed: Invalid API key.")
+            elif resp.status_code != 200:
+                raise HTTPException(status_code=502, detail=f"Fal.ai returned HTTP {resp.status_code}: {resp.text[:150]}")
             
-            # Poll for completion
-            for _ in range(30):
-                await time.sleep(2)
-                p_resp = await client.get(poll_url, headers=headers)
-                p_data = p_resp.json()
-                if p_data["status"] == "succeeded":
-                    out_url = p_data["output"][0] if isinstance(p_data["output"], list) else p_data["output"]
-                    img_resp = await client.get(out_url)
-                    with open(save_path, "wb") as f_out:
-                        f_out.write(img_resp.content)
-                    return
-                elif p_data["status"] == "failed":
-                    raise ValueError(f"Replicate generation failed: {p_data.get('error')}")
+            res_json = resp.json()
+            img_url = res_json.get("images", [{}])[0].get("url")
+            if not img_url:
+                raise HTTPException(status_code=502, detail="No output image URL found in Fal.ai response.")
+            img_resp = await client.get(img_url, timeout=30.0)
+            if img_resp.status_code != 200:
+                raise HTTPException(status_code=502, detail="Failed to download image from Fal.ai CDN.")
+            with open(save_path, "wb") as f_out:
+                f_out.write(img_resp.content)
 
     @staticmethod
     def _generate_procedural_photoreal(
@@ -270,23 +741,23 @@ class ArchitecturalGenerator:
     ):
         """
         Procedural photorealistic synthesis engine:
+        Used strictly for explicit Demo Simulation Mode.
         Takes the user's REAL uploaded sketch, uses the actual OpenCV extracted edge map
         for structural geometry, applies architectural material shaders, lighting atmosphere,
-        campus landscaping, and photorealistic tilt-shift optical styling.
+        campus landscaping, and optical post-processing.
         """
         # Load user's real sketch and real edge map
         sketch_bgr = cv2.imread(sketch_path)
-        edge_gray = cv2.imread(edge_path, cv2.IMREAD_GRAYSCALE)
+        edge_gray = cv2.imread(edge_path, cv2.IMREAD_GRAYSCALE) if edge_path and os.path.exists(edge_path) else None
         
         if sketch_bgr is None:
-            # Fallback if unreadable
             sketch_bgr = np.ones((768, 1024, 3), dtype=np.uint8) * 240
-            edge_gray = np.zeros((768, 1024), dtype=np.uint8)
             
         h, w = sketch_bgr.shape[:2]
-        if edge_gray.shape[:2] != (h, w):
-            edge_gray = cv2.resize(edge_gray, (w, h))
-
+        if edge_gray is None or edge_gray.shape[:2] != (h, w):
+            gray = cv2.cvtColor(sketch_bgr, cv2.COLOR_BGR2GRAY)
+            edge_gray = cv2.Canny(gray, 50, 150)
+            
         # 1. Sky & Atmospheric gradient
         sky_table = {
             "Morning": ((215, 235, 252), (242, 248, 255)),
@@ -307,9 +778,9 @@ class ArchitecturalGenerator:
             r = int(top_c[0] * (1 - t) + bot_c[0] * t)
             g = int(top_c[1] * (1 - t) + bot_c[1] * t)
             b = int(top_c[2] * (1 - t) + bot_c[2] * t)
-            canvas[y, :] = (b, g, r) # BGR
+            canvas[y, :] = (b, g, r)
             
-        # Render campus ground (emerald lawns + paved stone terrace)
+        # Render campus ground
         lawn_bgr = (50, 120, 55) if lighting not in ["Evening", "Night"] else (20, 45, 30)
         plaza_bgr = (195, 195, 200) if lighting not in ["Evening", "Night"] else (65, 70, 80)
         
@@ -330,48 +801,41 @@ class ArchitecturalGenerator:
             cv2.line(canvas, (0, py), (w, py), (160, 160, 165), 1)
 
         # 2. Material mapping based on architectural style
-        # Determine facade primary tone
         if style == "Modern Minimalist":
-            facade_tone = (225, 225, 228) # Off-white architectural concrete
-            glass_tone = (210, 180, 130) # Cool blue sky reflection
+            facade_tone = (225, 225, 228)
+            glass_tone = (210, 180, 130)
         elif style == "Sustainable / Green Architecture":
-            facade_tone = (175, 190, 175) # Warm timber / biophilic green
+            facade_tone = (175, 190, 175)
             glass_tone = (195, 190, 140)
         elif style == "Futuristic Parametric":
-            facade_tone = (195, 200, 210) # Brushed titanium
+            facade_tone = (195, 200, 210)
             glass_tone = (230, 210, 160)
         elif style == "Traditional Indian Heritage":
-            facade_tone = (85, 110, 185) # Agra red sandstone
+            facade_tone = (85, 110, 185)
             glass_tone = (140, 170, 200)
         elif style == "Institutional Brutalist":
-            facade_tone = (140, 145, 155) # Board-marked raw concrete
+            facade_tone = (140, 145, 155)
             glass_tone = (180, 165, 130)
-        else: # Contemporary / Neo-Classical
+        else:
             facade_tone = (215, 215, 215)
             glass_tone = (215, 185, 140)
             
         if lighting in ["Evening", "Night"]:
-            glass_tone = (120, 210, 255) # Glowing interior incandescent warmth
+            glass_tone = (120, 210, 255)
             
-        # 3. Structural Condition: Use the user's extracted edge map to synthesize building facade!
-        # Invert edge map so lines are 0 and open areas are 255
-        edge_mask = edge_gray > 40
-        
-        # Detect bounding envelope of building from user's edge map
+        # 3. Structural Condition: Use the user's extracted edge map to synthesize building facade
         edge_pts = np.where(edge_gray > 40)
         if len(edge_pts[0]) > 50:
-            min_y, max_y = np.min(edge_pts[0]), np.max(edge_pts[0])
-            min_x, max_x = np.min(edge_pts[1]), np.max(edge_pts[1])
-            # Extend ground connection
+            min_y, max_y = int(np.min(edge_pts[0])), int(np.max(edge_pts[0]))
+            min_x, max_x = int(np.min(edge_pts[1])), int(np.max(edge_pts[1]))
             max_y = max(max_y, horizon_y)
             
             # Fill building silhouette with facade material
-            facade_roi = canvas[min_y:max_y, min_x:max_x]
             cv2.rectangle(canvas, (min_x, min_y), (max_x, max_y), facade_tone, -1)
             
             # Add horizontal floor plate stratification
             floors = 4
-            floor_step = (max_y - min_y) // floors
+            floor_step = max(10, (max_y - min_y) // floors)
             for fl in range(1, floors):
                 fy = min_y + fl * floor_step
                 cv2.line(canvas, (min_x, fy), (max_x, fy), (90, 95, 105), 3)
@@ -382,26 +846,20 @@ class ArchitecturalGenerator:
                 fy2 = min_y + (fl + 1) * floor_step - 12
                 if fy2 > fy1:
                     cv2.rectangle(canvas, (min_x + 15, fy1), (max_x - 15, fy2), glass_tone, -1)
-                    # Window frames
                     cv2.rectangle(canvas, (min_x + 15, fy1), (max_x - 15, fy2), (50, 55, 65), 2)
-                    # Vertical mullions every 50 px
                     for mx in range(min_x + 65, max_x - 15, 50):
                         cv2.line(canvas, (mx, fy1), (mx, fy2), (50, 55, 65), 1)
-                        # Glass specular reflection highlight
                         cv2.line(canvas, (mx - 30, fy1 + 5), (mx - 10, fy2 - 5), (255, 255, 255), 2)
         else:
-            # Default architectural massing if sketch was empty
             cv2.rectangle(canvas, (int(w * 0.15), int(h * 0.3)), (int(w * 0.85), horizon_y), facade_tone, -1)
 
         # 4. Integrate precise structural edge contours from the sketch
-        # Blend the user's sketch line geometry as crisp structural reveals and architectural seams
         dilated_edge = cv2.dilate(edge_gray, np.ones((2, 2), np.uint8), iterations=1)
         edge_indices = np.where(dilated_edge > 40)
-        # Apply dark architectural joint color
         joint_color = (40, 45, 55) if lighting not in ["Evening", "Night"] else (15, 20, 30)
         canvas[edge_indices[0], edge_indices[1]] = joint_color
         
-        # 5. Landscaping elements: mature campus trees flanking entrance
+        # 5. Landscaping elements: campus trees
         tree_green = (40, 105, 45) if lighting not in ["Evening", "Night"] else (20, 55, 30)
         for tx, rad in [(int(w * 0.08), 50), (int(w * 0.92), 55), (int(w * 0.18), 35), (int(w * 0.82), 40)]:
             cv2.line(canvas, (tx, horizon_y), (tx, horizon_y - rad * 2), (40, 50, 65), 4)
@@ -409,13 +867,10 @@ class ArchitecturalGenerator:
             cv2.circle(canvas, (tx - 8, horizon_y - rad * 2), rad // 2, (tree_green[0]+25, tree_green[1]+30, tree_green[2]+20), -1)
 
         # 6. Global Lighting & Atmospheric Bloom Post-Processing
-        # Convert to PIL
         rgb = cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB)
         pil_img = Image.fromarray(rgb)
         
-        # Architectural lens bloom / soft glow on highlights
         bloom = pil_img.filter(ImageFilter.GaussianBlur(radius=6))
         pil_img = Image.blend(pil_img, bloom, 0.12)
         
         pil_img.save(save_path, "PNG", quality=95)
-

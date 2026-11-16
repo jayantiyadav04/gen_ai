@@ -38,10 +38,26 @@ def init_db():
             provider TEXT DEFAULT "demo",
             is_demo_mode BOOLEAN DEFAULT 1,
             is_favorite BOOLEAN DEFAULT 0,
+            model_name TEXT DEFAULT "lucataco/sdxl-controlnet",
+            model_version TEXT DEFAULT "",
+            cache_hit BOOLEAN DEFAULT 0,
+            aspect_ratio TEXT DEFAULT "4:3",
             created_at TEXT NOT NULL
         )
     """)
     
+    # Safe non-destructive column migrations for existing databases
+    cursor.execute("PRAGMA table_info(projects)")
+    cols = {row["name"] for row in cursor.fetchall()}
+    if "model_name" not in cols:
+        cursor.execute("ALTER TABLE projects ADD COLUMN model_name TEXT DEFAULT 'lucataco/sdxl-controlnet'")
+    if "model_version" not in cols:
+        cursor.execute("ALTER TABLE projects ADD COLUMN model_version TEXT DEFAULT ''")
+    if "cache_hit" not in cols:
+        cursor.execute("ALTER TABLE projects ADD COLUMN cache_hit BOOLEAN DEFAULT 0")
+    if "aspect_ratio" not in cols:
+        cursor.execute("ALTER TABLE projects ADD COLUMN aspect_ratio TEXT DEFAULT '4:3'")
+
     # App settings table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS app_settings (
@@ -65,8 +81,9 @@ def create_project(data: Dict[str, Any]) -> Dict[str, Any]:
             id, title, sketch_url, edge_url, render_url, style, building_type,
             lighting, materials, user_prompt, compiled_prompt, negative_prompt,
             controlnet_strength, denoising_strength, guidance_scale, seed,
-            resolution, inference_time_sec, provider, is_demo_mode, is_favorite, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            resolution, inference_time_sec, provider, is_demo_mode, is_favorite,
+            model_name, model_version, cache_hit, aspect_ratio, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         project_id,
         data.get("title", "Campus Architecture Concept"),
@@ -89,6 +106,10 @@ def create_project(data: Dict[str, Any]) -> Dict[str, Any]:
         data.get("provider", "demo"),
         1 if data.get("is_demo_mode", True) else 0,
         1 if data.get("is_favorite", False) else 0,
+        data.get("model_name", "lucataco/sdxl-controlnet"),
+        data.get("model_version", ""),
+        1 if data.get("cache_hit", False) else 0,
+        data.get("aspect_ratio", "4:3"),
         created_at
     ))
     
@@ -182,4 +203,3 @@ def get_setting(key: str, default: Optional[str] = None) -> Optional[str]:
     row = cursor.fetchone()
     conn.close()
     return row["value"] if row else default
-

@@ -1,52 +1,95 @@
-from typing import Dict, Any, List
+import re
+from typing import Dict, Any, List, Optional
 
-ARCHITECTURAL_STYLES: Dict[str, Dict[str, str]] = {
+ARCHITECTURAL_STYLES: Dict[str, Dict[str, Any]] = {
     "Modern Minimalist": {
         "description": "Clean horizontal lines, floor-to-ceiling glass curtain walls, smooth fair-faced concrete, minimalist cantilevered canopies",
-        "keywords": "modern minimalist architecture, Mies van der Rohe inspired, pure geometric volumes, expansive low-iron glass facades, refined concrete panels, slender steel structural columns"
+        "keywords": (
+            "modern minimalist architecture, Mies van der Rohe aesthetic, pure geometric volumes, "
+            "expansive low-iron glass facades with slender aluminum mullions, refined fair-faced concrete panels, "
+            "cantilevered entrance canopies, seamless indoor-outdoor transition, uncluttered spatial purity"
+        ),
+        "materials": "thermal insulated structural glass, fair-faced architectural concrete, brushed stainless steel, light granite pavers",
+        "negative_bias": "ornate moldings, classical pediments, rustic brickwork, baroque columns, chaotic clutter"
     },
     "Contemporary": {
         "description": "Dynamic angled geometry, mixed timber and zinc cladding, double-height atriums, articulated solar louvers",
-        "keywords": "contemporary educational architecture, dynamic volumetric facade, dark zinc panels, warm Accoya wood fins, open glazed atrium, architectural brise-soleil"
+        "keywords": (
+            "contemporary university educational architecture, dynamic volumetric facade composition, "
+            "dark anthracite zinc standing-seam panels, warm Accoya timber slat cladding, double-height glazed atrium, "
+            "kinetic architectural brise-soleil, articulated sunshades, bold geometric roof articulation"
+        ),
+        "materials": "anthracite zinc cladding, vertical warm cedar wood fins, floor-to-ceiling curtain walls, polished terrazzo",
+        "negative_bias": "antiquated columns, gothic arches, dilapidated surfaces, crumbling masonry"
     },
     "Neo-Classical": {
         "description": "Colonnaded portico, grand pediment, symmetry, carved sandstone capitals, classical university collegiate aesthetic",
-        "keywords": "neo-classical university building, monumental stone colonnade, fluted ionic columns, carved limestone frieze, symmetrical campus facade, stately academic hall"
+        "keywords": (
+            "neo-classical collegiate university architecture, monumental fluted ionic stone colonnade, "
+            "symmetrical academic palace elevation, carved Indiana limestone frieze, grand entry pediment, "
+            "formal architectural proportion, stately scholastic dignity"
+        ),
+        "materials": "honed Indiana limestone, buff sandstone, fluted marble columns, bronze-framed double-hung windows, slate roof tiles",
+        "negative_bias": "hyper-modern glass pods, brutalist raw concrete, futuristic neon, organic fluid blobs"
     },
     "Sustainable / Green Architecture": {
         "description": "Biophilic living green walls, rooftop solar pergola, timber mass-construction, natural rainwater harvesting bioswales",
-        "keywords": "sustainable biophilic campus architecture, LEED Platinum certified design, lush vertical living walls, cross-laminated timber (CLT) structure, photovoltaic glass canopy, native landscape bioswales"
+        "keywords": (
+            "sustainable biophilic campus architecture, LEED Platinum net-zero certified academic hub, "
+            "multi-tiered vertical living green walls, cross-laminated mass timber (CLT) framing, "
+            "photovoltaic solar roof pergola, native landscape bioswales, passive natural ventilation louvers"
+        ),
+        "materials": "cross-laminated timber (CLT), glulam beams, living sedum green roof, low-carbon bio-concrete, high-performance solar glass",
+        "negative_bias": "sterile industrial surfaces, smoke, heavy polluted concrete, windowless monolithic walls"
     },
     "Futuristic Parametric": {
         "description": "Fluid aerodynamic curves, parametric tessellated glass shell, titanium composite panels, illuminated sky-bridges",
-        "keywords": "futuristic parametric campus architecture, Zaha Hadid inspired fluid curvature, organic sweeping canopy, triangular tessellated glass envelope, structural exoskeleton, illuminated bridge walkways"
+        "keywords": (
+            "futuristic parametric university facility, Zaha Hadid inspired fluid curvature, "
+            "continuous organic sweeping roof envelope, triangular diagrid tessellated glass facade, "
+            "lightweight white titanium composite shell, elevated illuminated transparent sky-bridge"
+        ),
+        "materials": "white titanium zinc panels, curved structural double-glazed units, structural steel diagrid exoskeleton, seamless solid surface corian",
+        "negative_bias": "rigid rectangular boxes, classical columns, brick cottages, historic stonework"
     },
     "Traditional Indian Heritage": {
         "description": "Indo-Saracenic and regional heritage elements: intricate sandstone jali screens, chhatri pavilions, shaded courtyards, deep verandas",
-        "keywords": "Indo-Saracenic university campus architecture, red Agra sandstone, buff Dholpur stone carvings, geometric jali sunscreens, open haveli courtyards, shaded stepped colonnades"
+        "keywords": (
+            "Indo-Saracenic university campus architecture, warm red Agra sandstone cladding, "
+            "intricate geometric stone jali sunscreens filtering daylight, graceful chhatri corner pavilions, "
+            "deep shaded stepped colonnades, open haveli courtyard with central marble fountain"
+        ),
+        "materials": "Agra red sandstone, Dholpur beige sandstone, carved jali screens, Kota stone flooring, polished brass accents",
+        "negative_bias": "cold grey brutalist concrete, futuristic sci-fi glass pods, bare curtain walls without shading"
     },
     "Institutional Brutalist": {
         "description": "Monumental textured board-marked concrete, deep recessed fenestration, geometric sun-shades, exposed brick masonry",
-        "keywords": "institutional monumental architecture, Louis Kahn inspired, rich red exposed brick masonry, board-formed architectural concrete, deep recessed geometric window apertures, dramatic light wells"
+        "keywords": (
+            "institutional monumental architecture, Louis Kahn inspired, rich red exposed wire-cut brick masonry, "
+            "board-formed architectural concrete with visible wood-grain texture, deep recessed geometric window apertures, "
+            "dramatic circular light wells, timeless academic gravitas"
+        ),
+        "materials": "board-formed raw concrete, wire-cut architectural red brick, weathered bronze window trim, honed dark basalt flooring",
+        "negative_bias": "fragile all-glass curtain wall, shiny plastic panels, cartoonish colors, ornamental classical scrollwork"
     }
 }
 
 BUILDING_TYPES: Dict[str, Dict[str, str]] = {
     "University Building": {
         "description": "Multi-story academic complex with lecture wings, administrative offices, and landscaped courtyard",
-        "keywords": "university academic building, lecture hall complex, faculty offices, central gathering plaza, modern university campus"
+        "keywords": "university academic building, smart lecture hall complex, faculty office pavilion, central gathering quadrangle"
     },
     "School Building": {
         "description": "Welcoming educational facility with wide shaded corridors, learning clusters, and safe play commons",
-        "keywords": "contemporary educational school building, bright airy classrooms, wide covered verandas, landscaped schoolyard"
+        "keywords": "contemporary educational school building, naturally lit classrooms, wide covered verandas, landscaped courtyard commons"
     },
     "Library": {
         "description": "Monumental university central library with multi-tier glass reading atriums, book stacks, and quiet study terraces",
-        "keywords": "grand university central library, soaring multi-story glass atrium, interior warm wooden bookshelves visible through curtain wall, quiet reading terraces, monumental knowledge center"
+        "keywords": "grand university central library, soaring multi-story glass reading atrium, interior warm wooden bookshelves visible through glass, quiet study terraces"
     },
     "Auditorium": {
         "description": "State-of-the-art campus convocation auditorium, acoustic shell design, dramatic entrance canopy, illuminated foyer",
-        "keywords": "university convocation hall and auditorium, grand ceremonial entrance, sweeping curved acoustic roofline, glowing glazed grand foyer, campus event center"
+        "keywords": "university convocation hall and auditorium, grand ceremonial entrance, sweeping acoustic roofline, glowing glazed grand foyer"
     },
     "Research Laboratory": {
         "description": "High-tech interdisciplinary science and technology facility with cleanroom glazing, vibration-isolated wings, and service pods",
@@ -54,7 +97,7 @@ BUILDING_TYPES: Dict[str, Dict[str, str]] = {
     },
     "Sports Complex": {
         "description": "Olympic-standard university athletics pavilion, curved tensile roof, indoor arena, glass-enclosed fitness center overlooking fields",
-        "keywords": "university sports pavilion and athletic complex, soaring tensile membrane roof, glazed gymnasium facade, landscaped running tracks and athletic grounds"
+        "keywords": "university sports pavilion and athletic complex, soaring tensile membrane roof, glazed gymnasium facade, landscaped running tracks"
     },
     "Student Hostel": {
         "description": "Residential collegiate village with private student balconies, shared social commons, dining hall, and central lawn",
@@ -62,7 +105,7 @@ BUILDING_TYPES: Dict[str, Dict[str, str]] = {
     },
     "Complete Campus Layout": {
         "description": "Master-planned university campus bird's-eye and perspective view, pedestrian boulevards, water features, central quadrangle",
-        "keywords": "comprehensive university campus masterplan, aerial architectural perspective, interconnected pedestrian walkways, manicured central quads, fountain plaza, cohesive institutional design"
+        "keywords": "comprehensive university campus masterplan, aerial architectural perspective, interconnected pedestrian walkways, manicured central quads, fountain plaza"
     }
 }
 
@@ -93,15 +136,54 @@ LIGHTING_CONDITIONS: Dict[str, Dict[str, str]] = {
     }
 }
 
-DEFAULT_NEGATIVE_PROMPT = (
-    "rough sketch, pencil lines, ballpoint lines, blueprint grid, draft drawing, "
-    "cartoon, 3D CGI toy, low-poly rendering, warped architecture, crooked columns, "
-    "melting facade, floating roof, impossible non-euclidean geometry, broken glass, "
-    "unrealistic proportions, duplicate buildings, blurry, noisy, low resolution, "
-    "watermark, signature, text, amateur rendering, oversaturated neon, overexposed blown out whites"
+BASE_NEGATIVE_PROMPT = (
+    "rough sketch, hand-drawn lines, pencil hatch marks, ballpoint pen lines, blueprint grid, draft wireframe, "
+    "blurry, noisy, low resolution, 3D CGI toy, low-poly rendering, warped architecture, crooked structural columns, "
+    "floating roof, non-euclidean impossible geometry, shattered glass, broken facades, deformed windows, "
+    "watermark, signature, text, amateur rendering, oversaturated neon, overexposed blown-out highlights, "
+    "unnatural perspective, fisheye distortion"
 )
 
+DEFAULT_NEGATIVE_PROMPT = BASE_NEGATIVE_PROMPT
+
 class PromptBuilder:
+    @staticmethod
+    def expand_user_description(text: str) -> str:
+        """
+        Intelligently expands simple user descriptions into rich architectural terminology
+        while strictly preserving the user's intended building layout and features.
+        """
+        if not text or not text.strip():
+            return ""
+            
+        cleaned = text.strip()
+        expansions = []
+        
+        # Check for glass/windows
+        if re.search(r"\b(glass|glazing|window|transparent)\b", cleaned, re.IGNORECASE):
+            expansions.append("floor-to-ceiling high-performance structural glass curtain walls with low-iron transparency and thermal breaks")
+            
+        # Check for concrete/walls
+        if re.search(r"\b(concrete|cement|wall|facade)\b", cleaned, re.IGNORECASE):
+            expansions.append("smooth architectural fair-faced concrete with crisp formwork tie-holes and micro-textured surfaces")
+            
+        # Check for timber/wood
+        if re.search(r"\b(wood|timber|slat|fin)\b", cleaned, re.IGNORECASE):
+            expansions.append("vertical engineered timber louvers and warm natural wood soffit panels providing passive solar shading")
+            
+        # Check for greenery/plants/landscape
+        if re.search(r"\b(green|greenery|tree|garden|landscape|lawn|plant)\b", cleaned, re.IGNORECASE):
+            expansions.append("curated campus landscape architecture with permeable stone plazas, mature shade trees, and drought-tolerant groundcover")
+            
+        # Check for roof/canopy/entrance
+        if re.search(r"\b(roof|canopy|entrance|plaza|door)\b", cleaned, re.IGNORECASE):
+            expansions.append("cantilevered architectural canopy defining a dignified entrance foyer and welcoming pedestrian threshold")
+
+        expanded_details = ", ".join(expansions)
+        if expanded_details:
+            return f"{cleaned} ({expanded_details})"
+        return cleaned
+
     @staticmethod
     def build_prompt(
         user_prompt: str,
@@ -120,49 +202,54 @@ class PromptBuilder:
         
         prompt_parts: List[str] = []
         
-        # 1. Structural conditioning directive
+        # 1. Structural conditioning directive (matches sketch layout strictly)
         prompt_parts.append(
             "Photorealistic architectural photograph of a university campus facility, "
-            "strictly matching the geometric layout and elevation contours of the architectural sketch"
+            "strictly preserving the structural boundaries, floor elevations, and geometry of the conditioning sketch"
         )
         
-        # 2. Building Category & Identity
+        # 2. Building Category & Typology Identity
         prompt_parts.append(f"{bldg_info['keywords']}")
         
-        # 3. Architectural Style & Aesthetic
+        # 3. Architectural Style & Virtual LoRA Conditioning
         prompt_parts.append(f"{style_info['keywords']}")
         
-        # 4. Specific Materials & Textures
-        if materials.strip():
-            prompt_parts.append(f"facade constructed with {materials.strip()}")
+        # 4. Material Specification (Defaults to style materials if not specified)
+        effective_materials = materials.strip() if materials and materials.strip() else style_info.get("materials", "")
+        if effective_materials:
+            prompt_parts.append(f"facade articulated with {effective_materials}")
             
-        # 5. User's specific vision & instructions
-        if user_prompt.strip():
-            prompt_parts.append(f"features: {user_prompt.strip()}")
+        # 5. User's Vision with Intelligent Architectural Expansion
+        expanded_user = PromptBuilder.expand_user_description(user_prompt)
+        if expanded_user:
+            prompt_parts.append(f"architectural requirements: {expanded_user}")
             
-        # 6. Lighting & Atmosphere
+        # 6. Natural Lighting Atmosphere
         prompt_parts.append(f"{light_info['keywords']}")
         
-        # 7. Environment & Campus Life Context
+        # 7. Campus Landscape & Context
         prompt_parts.append(
             "surrounded by manicured university green lawns, mature deciduous shade trees, "
             "stone-paved pedestrian boulevards, university students and faculty walking naturally in the distance"
         )
         
-        # 8. Photographic Quality & Render Standard
+        # 8. Photographic Standards & Optical Realism
         prompt_parts.append(
             "professional architectural photography, shot on Hasselblad H6D-100c, "
-            "24mm tilt-shift lens with straight vertical perspective, ray-traced ambient occlusion, "
+            "24mm tilt-shift lens with perfectly vertical perspective lines, ray-traced ambient occlusion, "
             "physically-based glass reflections, ultra-high definition, 8k resolution, ArchDaily editorial showcase"
         )
         
         compiled_prompt = ", ".join(prompt_parts)
         
+        # Synthesize tailored style-specific negative prompt
+        style_neg = style_info.get("negative_bias", "")
+        negative_prompt = f"{BASE_NEGATIVE_PROMPT}, {style_neg}" if style_neg else BASE_NEGATIVE_PROMPT
+        
         return {
             "compiled_prompt": compiled_prompt,
-            "negative_prompt": DEFAULT_NEGATIVE_PROMPT,
+            "negative_prompt": negative_prompt,
             "style_summary": style_info["description"],
             "building_summary": bldg_info["description"],
             "lighting_summary": light_info["description"]
         }
-
