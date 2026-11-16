@@ -24,11 +24,19 @@ backend/uploads/*
 backend/generated/*
 !backend/generated/.gitkeep
 
+# Exclude generated renders, blueprints, and edge files anywhere outside samples
+*_render.png
+*_sketch.png
+*_edge.png
+*_blueprint.png
+!backend/samples/**
+
 # Node & Frontend Build
 node_modules/
 frontend/node_modules/
 frontend/dist/
 dist/
+*.tsbuildinfo
 
 # OS and Environment
 .DS_Store
@@ -42,5 +50,3 @@ backend/.env
 backend_backup/
 frontend.zip
 *.tmp
-
-*.tmp*.tsbuildinfo
