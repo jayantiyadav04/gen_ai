@@ -18,7 +18,7 @@ from fastapi import HTTPException
 from backend.config import GENERATED_DIR, UPLOAD_DIR, settings
 from backend.services.prompt_builder import (
     PromptBuilder, ARCHITECTURAL_STYLES, LIGHTING_CONDITIONS, BASE_NEGATIVE_PROMPT,
-    DEFAULT_NEGATIVE_PROMPT, profile_for_provider
+    profile_for_provider
 )
 from backend.services.cache import global_cache, CampusVisionCache
 from backend.database import get_setting
@@ -167,7 +167,8 @@ class ArchitecturalGenerator:
         resolution: str = "1024x768",
         negative_prompt_override: Optional[str] = None,
         provider_override: Optional[str] = None,
-        compiled_prompt_override: Optional[str] = None
+        compiled_prompt_override: Optional[str] = None,
+        prompt_mode: str = "architecture"
     ) -> Dict[str, Any]:
         """
         Executes the architectural image-to-image pipeline:
@@ -201,32 +202,57 @@ class ArchitecturalGenerator:
             elif (await ComfyUIClient.check_status())["reachable"]:
                 target_provider = "comfyui"
             else:
+                if (prompt_mode or "architecture").strip().lower() == "custom":
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Auto mode found no cloud API key and local ComfyUI is not running. Add a cloud key or start ComfyUI; Demo mode cannot generate custom subjects."
+                    )
                 raise HTTPException(
                     status_code=400,
                     detail="Auto mode found no cloud API key and local ComfyUI is not running. "
                            "Add a key in Settings, start ComfyUI, or choose Demo mode."
                 )
 
-        # 1. Compile the prompt for the model that will actually read it
+        # 1. Compile architecture prompts for the selected model. Custom sketches
+        # use the user's prompt verbatim so no building/style terms are injected.
         prompt_profile = profile_for_provider(target_provider)
-        prompt_data = PromptBuilder.build_prompt(
-            user_prompt=user_prompt,
-            style=style,
-            building_type=building_type,
-            lighting=lighting,
-            materials=materials,
-            profile=prompt_profile
-        )
-        compiled_prompt = (
-            compiled_prompt_override.strip()
-            if (compiled_prompt_override and compiled_prompt_override.strip())
-            else prompt_data["compiled_prompt"]
-        )
-        effective_negative_prompt = (
-            negative_prompt_override.strip()
-            if (negative_prompt_override and negative_prompt_override.strip())
-            else prompt_data["negative_prompt"]
-        )
+        prompt_mode = (prompt_mode or "architecture").strip().lower()
+        if prompt_mode not in ("architecture", "custom"):
+            raise HTTPException(status_code=400, detail="Prompt mode must be 'architecture' or 'custom'.")
+
+        if prompt_mode == "custom":
+            compiled_prompt = (compiled_prompt_override or user_prompt or "").strip()
+            if not compiled_prompt:
+                raise HTTPException(status_code=400, detail="Enter a positive prompt for your custom sketch.")
+            effective_negative_prompt = (
+                negative_prompt_override.strip()
+                if negative_prompt_override is not None
+                else "low quality, blurry, distorted, deformed subject, duplicate subject, malformed features, text, watermark"
+            )
+            if target_provider == "demo":
+                raise HTTPException(
+                    status_code=400,
+                    detail="The Demo engine only draws architectural examples and cannot interpret custom subjects. Select Local ComfyUI or configure a cloud diffusion provider."
+                )
+        else:
+            prompt_data = PromptBuilder.build_prompt(
+                user_prompt=user_prompt,
+                style=style,
+                building_type=building_type,
+                lighting=lighting,
+                materials=materials,
+                profile=prompt_profile
+            )
+            compiled_prompt = (
+                compiled_prompt_override.strip()
+                if (compiled_prompt_override and compiled_prompt_override.strip())
+                else prompt_data["compiled_prompt"]
+            )
+            effective_negative_prompt = (
+                negative_prompt_override.strip()
+                if (negative_prompt_override and negative_prompt_override.strip())
+                else prompt_data["negative_prompt"]
+            )
 
         gen_id = str(uuid.uuid4())[:8]
         render_filename = f"{gen_id}_render.png"
@@ -337,7 +363,8 @@ class ArchitecturalGenerator:
                 negative_prompt=effective_negative_prompt,
                 controlnet_strength=controlnet_strength,
                 guidance_scale=guidance_scale,
-                save_path=str(render_path)
+                save_path=str(render_path),
+                allow_text_only_fallback=(prompt_mode != "custom")
             )
             structure_lost = bool(hf_text_only)
             active_provider = "Hugging Face SDXL (Live Cloud GPU)"
@@ -490,7 +517,7 @@ class ArchitecturalGenerator:
         input_payload: Dict[str, Any] = {
             "image": data_uri,
             "prompt": prompt,
-            "negative_prompt": negative_prompt or DEFAULT_NEGATIVE_PROMPT,
+            "negative_prompt": negative_prompt,
             "condition_scale": round(float(controlnet_strength), 2),
             "guidance_scale": round(float(guidance_scale), 2),
             "num_inference_steps": 30
@@ -651,7 +678,8 @@ class ArchitecturalGenerator:
         negative_prompt: str,
         controlnet_strength: float,
         guidance_scale: float,
-        save_path: str
+        save_path: str,
+        allow_text_only_fallback: bool = True
     ):
         """Calls Hugging Face Inference API for ControlNet / SDXL image generation."""
         if not os.path.exists(edge_path):
@@ -666,8 +694,9 @@ class ArchitecturalGenerator:
         endpoints = [
             ("https://router.huggingface.co/hf-inference/models/diffusers/controlnet-canny-sdxl-1.0", True),
             ("https://api-inference.huggingface.co/models/diffusers/controlnet-canny-sdxl-1.0", True),
-            ("https://router.huggingface.co/hf-inference/models/stabilityai/stable-diffusion-xl-base-1.0", False),
         ]
+        if allow_text_only_fallback:
+            endpoints.append(("https://router.huggingface.co/hf-inference/models/stabilityai/stable-diffusion-xl-base-1.0", False))
 
         headers = {
             "Authorization": f"Bearer {hf_key}",
@@ -719,9 +748,16 @@ class ArchitecturalGenerator:
                 except Exception as ex:
                     last_error = str(ex)
                     
+        detail = f"Hugging Face Inference call failed: {last_error or 'Unknown error'}"
+        if not allow_text_only_fallback:
+            detail = (
+                "Hugging Face ControlNet is unavailable, so it cannot preserve this custom sketch. "
+                "Use Local ComfyUI, Replicate, or Fal for sketch-conditioned custom images. "
+                f"Last error: {last_error or 'Unknown error'}"
+            )
         raise HTTPException(
             status_code=502,
-            detail=f"Hugging Face Inference call failed: {last_error or 'Unknown error'}"
+            detail=detail
         )
 
     @staticmethod

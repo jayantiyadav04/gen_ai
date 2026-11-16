@@ -1,7 +1,7 @@
 import { engineBadge } from '../utils/provider';
 import React from 'react';
 import { ViewTab, AppConfig } from '../types';
-import { Building2, Sparkles, Image as ImageIcon, FolderGit2, Settings, Cpu, Layers } from 'lucide-react';
+import { Building2, Sparkles, FolderGit2, Settings, Cpu, Layers } from 'lucide-react';
 
 interface NavbarProps {
   currentTab: ViewTab;
@@ -40,7 +40,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </span>
               </div>
               <p className="text-[11px] text-arch-muted -mt-0.5 font-medium hidden sm:block">
-                Sketch-to-Render Campus Architecture
+                Architecture + Custom Sketch-to-Image
               </p>
             </div>
           </div>
@@ -67,17 +67,6 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <Sparkles className="w-4 h-4 text-arch-cyan" />
               AI Studio
-            </button>
-            <button
-              onClick={() => onTabChange('examples')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                currentTab === 'examples'
-                  ? 'text-navy-900 bg-canvas-200 font-semibold'
-                  : 'text-slate-600 hover:text-navy-900 hover:bg-canvas-100'
-              }`}
-            >
-              <ImageIcon className="w-4 h-4 text-slate-500" />
-              Example Gallery
             </button>
             <button
               onClick={() => onTabChange('projects')}
@@ -148,12 +137,6 @@ export const Navbar: React.FC<NavbarProps> = ({
           className={`text-xs font-medium px-2 py-1 rounded flex items-center gap-1 ${currentTab === 'studio' ? 'bg-blue-50 text-arch-blue font-semibold ring-1 ring-blue-200' : 'text-slate-600'}`}
         >
           <Sparkles className="w-3 h-3 text-arch-cyan" /> Studio
-        </button>
-        <button
-          onClick={() => onTabChange('examples')}
-          className={`text-xs font-medium px-2 py-1 rounded ${currentTab === 'examples' ? 'bg-white shadow-xs font-semibold' : 'text-slate-600'}`}
-        >
-          Examples
         </button>
         <button
           onClick={() => onTabChange('projects')}

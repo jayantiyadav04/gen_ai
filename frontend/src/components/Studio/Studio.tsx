@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { PreprocessResult, GenerationResult, ArchitecturalProject, AppConfig, ExampleCase, StudioPreset } from '../../types';
 import { SketchUploader } from './SketchUploader';
 import { PromptBuilderPanel } from './PromptBuilderPanel';
+import { CustomSketchPromptPanel } from './CustomSketchPromptPanel';
 import { AdvancedControls } from './AdvancedControls';
 import { GenerationProgress } from './GenerationProgress';
 import { isLocalProvider } from '../../utils/provider';
@@ -18,6 +19,8 @@ interface StudioProps {
 const DEFAULT_MATERIALS = 'Structural glass curtain walls, fair-faced concrete, timber accents';
 const DEFAULT_PROMPT =
   'modern university academic block, glass windows, landscaped entrance, fair-faced concrete textures';
+const DEFAULT_CUSTOM_NEGATIVE =
+  'low quality, blurry, distorted, deformed subject, duplicate subject, malformed features, text, watermark';
 
 export const Studio: React.FC<StudioProps> = ({ config, onOpenSettings, preset }) => {
   // Sketch state (real edge map comes from the backend, never guessed URLs)
@@ -25,6 +28,7 @@ export const Studio: React.FC<StudioProps> = ({ config, onOpenSettings, preset }
   const [isLoadingSketch, setIsLoadingSketch] = useState(false);
   const [sketchError, setSketchError] = useState<string | null>(null);
   const [projectTitle, setProjectTitle] = useState<string | undefined>(preset?.title);
+  const [promptMode, setPromptMode] = useState<'architecture' | 'custom'>(preset?.promptMode || 'architecture');
 
   // Architecture parameters
   const [style, setStyle] = useState(preset?.style || 'Modern Minimalist');
@@ -32,6 +36,12 @@ export const Studio: React.FC<StudioProps> = ({ config, onOpenSettings, preset }
   const [lighting, setLighting] = useState(preset?.lighting || 'Morning');
   const [materials, setMaterials] = useState(preset?.materials || DEFAULT_MATERIALS);
   const [userPrompt, setUserPrompt] = useState(preset?.userPrompt || DEFAULT_PROMPT);
+  const [customPositivePrompt, setCustomPositivePrompt] = useState(
+    preset?.promptMode === 'custom' ? preset.userPrompt || '' : ''
+  );
+  const [customNegativePrompt, setCustomNegativePrompt] = useState(
+    preset?.promptMode === 'custom' ? preset.negativePrompt ?? DEFAULT_CUSTOM_NEGATIVE : DEFAULT_CUSTOM_NEGATIVE
+  );
 
   // Advanced parameters
   const [controlnetStrength, setControlnetStrength] = useState(preset?.controlnetStrength ?? 0.7);
@@ -73,6 +83,7 @@ export const Studio: React.FC<StudioProps> = ({ config, onOpenSettings, preset }
   // Picking a preloaded sketch configures the WHOLE studio for it: style, building type, lighting,
   // materials, description and tuned strengths. The compiled prompt then rebuilds automatically.
   const handleSelectExample = (ex: ExampleCase) => {
+    setPromptMode('architecture');
     setStyle(ex.style);
     setBuildingType(ex.category);
     setLighting(ex.lighting);
@@ -89,6 +100,10 @@ export const Studio: React.FC<StudioProps> = ({ config, onOpenSettings, preset }
   };
 
   const handleGenerate = async (providerOverride?: string) => {
+    if (promptMode === 'custom' && !customPositivePrompt.trim()) {
+      setGenerationError('Enter a positive prompt describing what your custom sketch should become.');
+      return;
+    }
     setGenerationError(null);
     setIsGenerating(true);
 
@@ -96,20 +111,25 @@ export const Studio: React.FC<StudioProps> = ({ config, onOpenSettings, preset }
       const res: GenerationResult = await generateRender({
         sketch_id: currentSketch?.sketch_id,
         sketch_url: currentSketch?.sketch_url,
-        user_prompt: userPrompt,
-        style,
-        building_type: buildingType,
-        lighting,
-        materials,
+        prompt_mode: promptMode,
+        user_prompt: promptMode === 'custom' ? customPositivePrompt.trim() : userPrompt,
+        style: promptMode === 'custom' ? 'Custom' : style,
+        building_type: promptMode === 'custom' ? 'Custom Sketch' : buildingType,
+        lighting: promptMode === 'custom' ? 'User-directed' : lighting,
+        materials: promptMode === 'custom' ? '' : materials,
         controlnet_strength: controlnetStrength,
         denoising_strength: denoisingStrength,
         guidance_scale: guidanceScale,
         seed,
         resolution,
-        negative_prompt: negativeEdited ? negativePrompt : undefined,
-        compiled_prompt: manualPrompt ?? undefined,
+        negative_prompt: promptMode === 'custom'
+          ? customNegativePrompt
+          : negativeEdited ? negativePrompt : undefined,
+        compiled_prompt: promptMode === 'architecture' ? manualPrompt ?? undefined : undefined,
         provider: providerOverride,
-        title: projectTitle || `${buildingType} — ${style}`,
+        title: projectTitle || (promptMode === 'custom'
+          ? `${customPositivePrompt.trim().slice(0, 48)} — Custom Sketch`
+          : `${buildingType} — ${style}`),
       });
 
       setActiveProject(res.project);
@@ -135,10 +155,12 @@ export const Studio: React.FC<StudioProps> = ({ config, onOpenSettings, preset }
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-canvas-200">
             <div>
               <h1 className="text-2xl font-bold tracking-tight text-navy-900 font-sans">
-                Architectural AI Studio
+                {promptMode === 'custom' ? 'Sketch-to-Image Studio' : 'Architectural AI Studio'}
               </h1>
               <p className="text-xs text-slate-600 mt-1">
-                Upload your concept sketch, choose style & lighting, and generate a realistic concept render.
+                {promptMode === 'custom'
+                  ? 'Draw or upload any subject, describe it, and generate an image guided by your sketch.'
+                  : 'Upload your concept sketch, choose style & lighting, and generate a realistic concept render.'}
               </p>
             </div>
 
@@ -155,6 +177,41 @@ export const Studio: React.FC<StudioProps> = ({ config, onOpenSettings, preset }
             </div>
           </div>
 
+          <div className="bg-white rounded-xl border border-canvas-300 shadow-subtle p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <p className="text-xs font-bold text-navy-900">What are you creating?</p>
+              <p className="text-[11px] text-slate-500 mt-0.5">Choose architecture presets or describe any custom subject.</p>
+            </div>
+            <div className="inline-flex p-1 bg-canvas-100 border border-slate-200 rounded-lg self-start sm:self-auto" role="group" aria-label="Sketch generation mode">
+              <button
+                type="button"
+                aria-pressed={promptMode === 'architecture'}
+                onClick={() => {
+                  setPromptMode('architecture');
+                  setNegativeEdited(false);
+                  setManualPrompt(null);
+                  if (promptMode !== 'architecture') setProjectTitle(undefined);
+                }}
+                className={`px-3 py-2 text-xs font-semibold rounded-md transition-colors ${promptMode === 'architecture' ? 'bg-navy-900 text-white shadow-xs' : 'text-slate-600 hover:text-navy-900'}`}
+              >Architecture</button>
+              <button
+                type="button"
+                aria-pressed={promptMode === 'custom'}
+                onClick={() => {
+                  setPromptMode('custom');
+                  if (promptMode !== 'custom') setProjectTitle(undefined);
+                }}
+                className={`px-3 py-2 text-xs font-semibold rounded-md transition-colors ${promptMode === 'custom' ? 'bg-navy-900 text-white shadow-xs' : 'text-slate-600 hover:text-navy-900'}`}
+              >Custom Sketch</button>
+            </div>
+          </div>
+
+          {promptMode === 'custom' && config?.is_demo_mode && (
+            <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-900">
+              Custom subjects need a diffusion model. If using Auto, make sure Local ComfyUI is running or configure a cloud provider. The Demo engine only makes procedural architecture images.
+            </div>
+          )}
+
           {/* 1. Sketch Uploader */}
           <SketchUploader
             currentSketch={currentSketch}
@@ -168,8 +225,8 @@ export const Studio: React.FC<StudioProps> = ({ config, onOpenSettings, preset }
           )}
           {sketchError && <p className="text-xs text-rose-700">{sketchError}</p>}
 
-          {/* 2. Architectural Conditioning & Style Panel */}
-          <PromptBuilderPanel
+          {/* 2. Architecture presets or direct custom subject prompts */}
+          {promptMode === 'architecture' ? <PromptBuilderPanel
             style={style}
             onStyleChange={setStyle}
             buildingType={buildingType}
@@ -185,7 +242,14 @@ export const Studio: React.FC<StudioProps> = ({ config, onOpenSettings, preset }
               setManualPrompt(manual ? compiled : null);
               if (neg && !negativeEdited) setNegativePrompt(neg);
             }}
-          />
+          /> : (
+            <CustomSketchPromptPanel
+              positivePrompt={customPositivePrompt}
+              onPositivePromptChange={(value) => { setCustomPositivePrompt(value); setProjectTitle(undefined); }}
+              negativePrompt={customNegativePrompt}
+              onNegativePromptChange={setCustomNegativePrompt}
+            />
+          )}
 
           {/* 3. Advanced Diffusion Controls */}
           <AdvancedControls
@@ -202,6 +266,7 @@ export const Studio: React.FC<StudioProps> = ({ config, onOpenSettings, preset }
             onResolutionChange={setResolution}
             negativePrompt={negativePrompt}
             onNegativePromptChange={(v) => { setNegativePrompt(v); setNegativeEdited(true); }}
+            promptMode={promptMode}
           />
 
           {/* Generation Progress Indicator */}
@@ -239,13 +304,13 @@ export const Studio: React.FC<StudioProps> = ({ config, onOpenSettings, preset }
                 >
                   Configure API Token
                 </button>
-                <button
+                {promptMode === 'architecture' && <button
                   type="button"
                   onClick={() => handleGenerate('demo')}
                   className="px-3.5 py-2 rounded-lg bg-navy-900 text-white font-semibold text-xs hover:bg-navy-800 transition-colors shadow-xs"
                 >
                   Run Demo Simulation
-                </button>
+                </button>}
               </div>
             </div>
           )}
@@ -265,7 +330,7 @@ export const Studio: React.FC<StudioProps> = ({ config, onOpenSettings, preset }
               ) : (
                 <>
                   <Sparkles className="w-4 h-4 text-cyan-300 group-hover:scale-110 transition-transform" />
-                  <span>Generate Campus Render</span>
+                  <span>{promptMode === 'custom' ? 'Generate Image' : 'Generate Campus Render'}</span>
                 </>
               )}
             </button>

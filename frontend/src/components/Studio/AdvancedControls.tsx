@@ -15,6 +15,7 @@ interface AdvancedControlsProps {
   onResolutionChange: (v: string) => void;
   negativePrompt: string;
   onNegativePromptChange: (v: string) => void;
+  promptMode?: 'architecture' | 'custom';
 }
 
 export const AdvancedControls: React.FC<AdvancedControlsProps> = ({
@@ -31,6 +32,7 @@ export const AdvancedControls: React.FC<AdvancedControlsProps> = ({
   onResolutionChange,
   negativePrompt,
   onNegativePromptChange,
+  promptMode = 'architecture',
 }) => {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -106,7 +108,11 @@ export const AdvancedControls: React.FC<AdvancedControlsProps> = ({
                 className={`w-full accent-arch-cyan ${isLocal ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
               />
               <p className="text-[10px] text-slate-500">
-                {isLocal ? 'Not used in local mode: the render always starts from the sketch edges.' : 'Amount of architectural texture and realistic material synthesis.'}
+                {isLocal
+                  ? 'Not used in local mode: the render always starts from the sketch edges.'
+                  : promptMode === 'custom'
+                    ? 'Amount of image transformation and new detail.'
+                    : 'Amount of architectural texture and realistic material synthesis.'}
               </p>
             </div>
 
@@ -197,21 +203,20 @@ export const AdvancedControls: React.FC<AdvancedControlsProps> = ({
             </div>
           </div>
 
-          {/* Negative Prompt */}
-          <div className="space-y-1.5 bg-white p-3.5 rounded-lg border border-slate-200">
-            <label className="font-semibold text-navy-900 font-sans block">
-              Architectural Negative Prompt
-            </label>
-            <textarea
-              rows={2}
-              value={negativePrompt}
-              onChange={(e) => onNegativePromptChange(e.target.value)}
-              className="w-full text-[11px] font-mono p-2 bg-canvas-50 border border-slate-200 rounded text-slate-700 focus:outline-none focus:ring-1 focus:ring-arch-cyan leading-relaxed resize-none"
-            />
-            <p className="text-[10px] text-slate-500 font-mono">
-              Suppresses warped columns, floating roofs, sketches in output, cartoon artifacts, and blurry geometry.
-            </p>
-          </div>
+          {promptMode === 'architecture' && (
+            <div className="space-y-1.5 bg-white p-3.5 rounded-lg border border-slate-200">
+              <label className="font-semibold text-navy-900 font-sans block">Architectural Negative Prompt</label>
+              <textarea
+                rows={2}
+                value={negativePrompt}
+                onChange={(e) => onNegativePromptChange(e.target.value)}
+                className="w-full text-[11px] font-mono p-2 bg-canvas-50 border border-slate-200 rounded text-slate-700 focus:outline-none focus:ring-1 focus:ring-arch-cyan leading-relaxed resize-none"
+              />
+              <p className="text-[10px] text-slate-500 font-mono">
+                Suppresses warped columns, floating roofs, sketches in output, cartoon artifacts, and blurry geometry.
+              </p>
+            </div>
+          )}
         </div>
       )}
     </div>

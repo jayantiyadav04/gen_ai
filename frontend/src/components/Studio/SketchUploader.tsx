@@ -81,10 +81,10 @@ export const SketchUploader: React.FC<SketchUploaderProps> = ({
         <div>
           <h3 className="text-sm font-bold text-navy-900 font-sans uppercase tracking-wider flex items-center gap-1.5">
             <Layers className="w-4 h-4 text-arch-cyan" />
-            1. Architectural Sketch Input
+            1. Sketch Input
           </h3>
           <p className="text-xs text-slate-500">
-            Upload a concept drawing, draw on the digital sketchpad, or choose a benchmark study
+            Upload a drawing, use the digital sketchpad, or choose a preloaded architecture sketch
           </p>
         </div>
 

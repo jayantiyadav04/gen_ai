@@ -1,4 +1,4 @@
-export type ViewTab = 'landing' | 'studio' | 'examples' | 'projects';
+export type ViewTab = 'landing' | 'studio' | 'projects';
 
 export type ComparisonMode = 'slider' | 'side-by-side' | 'edge-overlay';
 
@@ -65,11 +65,13 @@ export interface PreprocessResult {
 export interface StudioPreset {
   sketchUrl?: string;
   title?: string;
+  promptMode?: 'architecture' | 'custom';
   style?: string;
   category?: string;
   lighting?: string;
   materials?: string;
   userPrompt?: string;
+  negativePrompt?: string;
   controlnetStrength?: number;
   denoisingStrength?: number;
   guidanceScale?: number;
@@ -94,6 +96,7 @@ export interface AppConfig {
 export interface GenerationParams {
   sketch_id?: string;
   sketch_url?: string;
+  prompt_mode?: 'architecture' | 'custom';
   user_prompt: string;
   style: string;
   building_type: string;

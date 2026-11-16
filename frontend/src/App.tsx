@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { ViewTab, AppConfig, ExampleCase, ArchitecturalProject, StudioPreset } from './types';
+import { ViewTab, AppConfig, ArchitecturalProject, StudioPreset } from './types';
 import { getConfig } from './api/client';
 import { Navbar } from './components/Navbar';
 import { Footer } from './components/Footer';
 import { LandingPage } from './components/LandingPage';
 import { Studio } from './components/Studio/Studio';
-import { ExampleGallery } from './components/Examples/ExampleGallery';
 import { ProjectsGallery } from './components/Projects/ProjectsGallery';
 import { SettingsModal } from './components/SettingsModal';
 import { ArchitectureModal } from './components/ArchitectureModal';
@@ -16,7 +15,7 @@ export const App: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isArchitectureOpen, setIsArchitectureOpen] = useState(false);
 
-  // Studio preset state when navigating from examples or projects
+  // Studio preset state when reopening a saved project
   const [studioPreset, setStudioPreset] = useState<StudioPreset | null>(null);
   // Changing the key remounts the Studio so a new preset always applies
   const [studioKey, setStudioKey] = useState(0);
@@ -34,29 +33,17 @@ export const App: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleLoadExampleToStudio = (example: ExampleCase) =>
-    openStudioWith({
-      sketchUrl: example.sketch_url,
-      title: example.title,
-      style: example.style,
-      category: example.category,
-      lighting: example.lighting,
-      materials: example.materials,
-      userPrompt: example.user_prompt,
-      controlnetStrength: example.controlnet_strength,
-      denoisingStrength: example.denoising_strength,
-      guidanceScale: example.guidance_scale,
-    });
-
   const handleOpenProjectInStudio = (project: ArchitecturalProject) =>
     openStudioWith({
       sketchUrl: project.sketch_url,
       title: project.title,
+      promptMode: project.building_type === 'Custom Sketch' ? 'custom' : 'architecture',
       style: project.style,
       category: project.building_type,
       lighting: project.lighting,
       materials: project.materials,
       userPrompt: project.user_prompt,
+      negativePrompt: project.negative_prompt,
       controlnetStrength: project.controlnet_strength,
       denoisingStrength: project.denoising_strength,
       guidanceScale: project.guidance_scale,
@@ -87,6 +74,7 @@ export const App: React.FC = () => {
               setCurrentTab(tab);
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
+            onCreateCustom={() => openStudioWith({ promptMode: 'custom' })}
             onOpenArchitecture={() => setIsArchitectureOpen(true)}
           />
         )}
@@ -98,10 +86,6 @@ export const App: React.FC = () => {
             onOpenSettings={() => setIsSettingsOpen(true)}
             preset={studioPreset}
           />
-        )}
-
-        {currentTab === 'examples' && (
-          <ExampleGallery onLoadExampleToStudio={handleLoadExampleToStudio} />
         )}
 
         {currentTab === 'projects' && (

@@ -23,7 +23,7 @@ export const Footer: React.FC<FooterProps> = ({ onOpenArchitecture, onOpenSettin
             </div>
             <p className="text-xs text-slate-600 max-w-md leading-relaxed">
               University Generative AI Research & Architectural Visualization Engine.
-              Empowering campus planning committees, educational architects, and board presentations
+              Sketch-guided image generation for architecture and custom subjects
               with sketch-to-render diffusion guided by ControlNet.
             </p>
             <div className="flex items-center gap-3 text-xs text-slate-500 font-mono">

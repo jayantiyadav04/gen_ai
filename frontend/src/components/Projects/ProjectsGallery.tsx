@@ -45,7 +45,7 @@ export const ProjectsGallery: React.FC<ProjectsGalleryProps> = ({
 
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!window.confirm('Are you sure you want to delete this architectural render from your gallery?')) return;
+    if (!window.confirm('Are you sure you want to delete this generated image from your gallery?')) return;
     try {
       await deleteProject(id);
       setProjects((prev) => prev.filter((p) => p.id !== id));
@@ -77,10 +77,10 @@ export const ProjectsGallery: React.FC<ProjectsGalleryProps> = ({
             </span>
           </div>
           <h1 className="text-3xl font-extrabold tracking-tight text-navy-900 font-sans">
-            My Campus Projects
+            My Saved Projects
           </h1>
           <p className="text-sm text-slate-600 mt-1">
-            Browse and review your saved architectural visual transformations, metadata, and comparisons.
+            Browse saved sketch-guided images, prompts, generation settings, and comparisons.
           </p>
         </div>
 
@@ -114,6 +114,7 @@ export const ProjectsGallery: React.FC<ProjectsGalleryProps> = ({
           className="px-3 py-2 bg-canvas-50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-arch-cyan font-medium"
         >
           <option value="All">All Typologies</option>
+          <option value="Custom Sketch">Custom Sketch</option>
           <option value="University Building">University Building</option>
           <option value="Library">Library</option>
           <option value="Auditorium">Auditorium</option>
@@ -148,12 +149,12 @@ export const ProjectsGallery: React.FC<ProjectsGalleryProps> = ({
           </div>
           <div>
             <h3 className="text-base font-bold text-navy-900 font-sans">
-              No campus projects found
+              No saved projects found
             </h3>
             <p className="text-xs text-slate-500 mt-1">
               {search || buildingType !== 'All' || favoritesOnly
                 ? 'Try clearing your search filters to see all projects.'
-                : 'Upload an architectural concept sketch in the studio to generate your first render.'}
+                : 'Upload or draw a sketch in the studio to generate your first image.'}
             </p>
           </div>
           <button
@@ -179,7 +180,7 @@ export const ProjectsGallery: React.FC<ProjectsGalleryProps> = ({
                   className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-300"
                 />
                 <div className="absolute top-2.5 left-2.5 bg-navy-900/80 backdrop-blur-sm text-white px-2 py-0.5 rounded text-[10px] font-mono border border-slate-700">
-                  {proj.style}
+                  {proj.building_type === 'Custom Sketch' ? 'Custom Image' : proj.style}
                 </div>
                 <button
                   onClick={(e) => handleToggleFav(proj.id, e)}
@@ -198,7 +199,7 @@ export const ProjectsGallery: React.FC<ProjectsGalleryProps> = ({
                 <div>
                   <div className="flex items-center justify-between text-[10px] font-mono text-slate-500 mb-1">
                     <span>{proj.building_type}</span>
-                    <span>{proj.lighting}</span>
+                    <span>{proj.building_type === 'Custom Sketch' ? 'Prompt guided' : proj.lighting}</span>
                   </div>
                   <h3 className="text-sm font-bold text-navy-900 font-sans group-hover:text-arch-blue transition-colors line-clamp-1">
                     {proj.title}

@@ -126,6 +126,7 @@ class PreprocessUrlRequest(BaseModel):
 class GenerateRequest(BaseModel):
     sketch_id: Optional[str] = None
     sketch_url: Optional[str] = None
+    prompt_mode: str = "architecture"
     user_prompt: str = ""
     style: str = "Modern Minimalist"
     building_type: str = "University Building"
@@ -295,8 +296,8 @@ async def preprocess_sketch_endpoint(file: UploadFile = File(...)):
 @app.post("/api/generate")
 async def generate_render_endpoint(req: GenerateRequest):
     """
-    Generates a photorealistic campus architectural render from the sketch
-    using structural conditioning and generative AI.
+    Generates an image from the sketch using structural conditioning and generative AI.
+    Architecture mode uses the architectural prompt builder; custom mode passes the user's prompts directly.
     """
     # 1. Resolve sketch path and edge path
     sketch_path = None
@@ -357,7 +358,8 @@ async def generate_render_endpoint(req: GenerateRequest):
         resolution=req.resolution,
         negative_prompt_override=req.negative_prompt,
         provider_override=req.provider,
-        compiled_prompt_override=req.compiled_prompt
+        compiled_prompt_override=req.compiled_prompt,
+        prompt_mode=req.prompt_mode
     )
 
     # 3. Determine public sketch & edge URLs

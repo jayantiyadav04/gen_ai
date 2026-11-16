@@ -137,8 +137,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* Active Mode Notice */}
           <div
             className={`p-3.5 rounded-lg border text-xs leading-relaxed ${config?.is_demo_mode
-                ? 'bg-amber-50/70 border-amber-200 text-amber-900'
-                : 'bg-emerald-50/70 border-emerald-200 text-emerald-900'
+              ? 'bg-amber-50/70 border-amber-200 text-amber-900'
+              : 'bg-emerald-50/70 border-emerald-200 text-emerald-900'
               }`}
           >
             <div className="flex items-start gap-2">
@@ -296,8 +296,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {testResult && (
             <div
               className={`p-3 rounded-lg text-xs flex items-start gap-2 border ${testResult.valid
-                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                  : 'bg-rose-50 text-rose-800 border-rose-200'
+                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                : 'bg-rose-50 text-rose-800 border-rose-200'
                 }`}
             >
               {testResult.valid ? (
@@ -316,8 +316,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {feedback && (
             <div
               className={`p-2.5 rounded-lg text-xs flex items-center gap-1.5 ${feedback.type === 'success'
-                  ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                  : 'bg-rose-50 text-rose-800 border border-rose-200'
+                ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                : 'bg-rose-50 text-rose-800 border border-rose-200'
                 }`}
             >
               <CheckCircle2 className="w-4 h-4 text-emerald-600" />

@@ -22,6 +22,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
   const [isBoardOpen, setIsBoardOpen] = useState(false);
   const [isFav, setIsFav] = useState(project.is_favorite);
   const [isCopied, setIsCopied] = useState(false);
+  const isCustomSketch = project.building_type === 'Custom Sketch' || project.style === 'Custom';
 
   useEffect(() => {
     try {
@@ -76,11 +77,13 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
               {project.title}
             </h2>
             <div className="flex items-center gap-2 text-xs text-slate-500 font-mono mt-0.5">
-              <span>{project.building_type}</span>
+              <span>{isCustomSketch ? 'Custom Sketch' : project.building_type}</span>
               <span>•</span>
-              <span className="text-arch-cyan font-semibold">{project.style}</span>
-              <span>•</span>
-              <span>{project.lighting}</span>
+              <span className="text-arch-cyan font-semibold">{isCustomSketch ? 'Prompt guided' : project.style}</span>
+              {!isCustomSketch && <>
+                <span>•</span>
+                <span>{project.lighting}</span>
+              </>}
             </div>
           </div>
         </div>
@@ -99,14 +102,14 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
             <Heart className={`w-4 h-4 ${isFav ? 'fill-rose-500 text-rose-500' : ''}`} />
           </button>
 
-          <button
+          {!isCustomSketch && <button
             onClick={() => setIsBoardOpen(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-navy-900 bg-canvas-100 hover:bg-canvas-200 border border-slate-300 rounded-lg shadow-2xs transition-colors"
             title="Export official architectural presentation board"
           >
             <FileText className="w-3.5 h-3.5 text-arch-cyan" />
             <span>Review Board Sheet</span>
-          </button>
+          </button>}
 
           <button
             onClick={onRegenerate}
@@ -142,7 +145,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
         <div className="bg-white p-5 rounded-xl border border-canvas-300 shadow-subtle space-y-4">
           <h4 className="text-xs font-bold uppercase tracking-wider text-navy-900 font-sans flex items-center gap-1.5">
             <Sliders className="w-4 h-4 text-arch-cyan" />
-            Conditioning Parameters
+            {isCustomSketch ? 'Generation Parameters' : 'Conditioning Parameters'}
           </h4>
 
           <div className="space-y-2.5 text-xs font-mono">
@@ -203,7 +206,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
           <div className="flex items-center justify-between">
             <h4 className="text-xs font-bold uppercase tracking-wider text-navy-900 font-sans flex items-center gap-1.5">
               <Sparkles className="w-4 h-4 text-arch-cyan" />
-              Synthesized Architectural Prompt
+              {isCustomSketch ? 'Positive Prompt' : 'Synthesized Architectural Prompt'}
             </h4>
             <button
               onClick={handleCopyPrompt}
@@ -221,7 +224,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
           {project.negative_prompt && (
             <div className="space-y-1.5">
               <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider font-mono">
-                Negative Suppression Prompt
+                {isCustomSketch ? 'Negative Prompt' : 'Negative Suppression Prompt'}
               </p>
               <div className="bg-canvas-50 p-2.5 rounded-lg border border-slate-200 text-[11px] font-mono text-slate-600 line-clamp-2">
                 {project.negative_prompt}
@@ -235,7 +238,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
               onClick={() => handleDownload(project.sketch_url, `${project.title.replace(/\s+/g, '_')}_sketch.png`)}
               className="text-xs font-semibold text-slate-600 hover:text-navy-900 hover:underline flex items-center gap-1 font-mono"
             >
-              <Download className="w-3.5 h-3.5" /> Download Concept Sketch
+              <Download className="w-3.5 h-3.5" /> {isCustomSketch ? 'Download Original Sketch' : 'Download Concept Sketch'}
             </button>
             {project.edge_url && (
               <button

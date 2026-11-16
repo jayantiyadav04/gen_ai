@@ -1,14 +1,15 @@
 import React from 'react';
 import { ViewTab } from '../types';
 import { ComparisonViewer } from './Comparison/ComparisonViewer';
-import { Sparkles, ArrowRight, Building2, Layers, Cpu, ShieldCheck, CheckCircle2, ChevronRight, Eye, Sun, Compass } from 'lucide-react';
+import { Sparkles, ArrowRight, ShieldCheck, CheckCircle2, Sun, Compass } from 'lucide-react';
 
 interface LandingPageProps {
   onNavigate: (tab: ViewTab) => void;
+  onCreateCustom: () => void;
   onOpenArchitecture: () => void;
 }
 
-export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate, onOpenArchitecture }) => {
+export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate, onCreateCustom, onOpenArchitecture }) => {
   return (
     <div className="space-y-16 sm:space-y-24 pb-16 animate-fade-in">
       {/* 1. Hero Section */}
@@ -19,17 +20,15 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate, onOpenArch
             {/* Tag pill */}
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-xs font-mono font-semibold text-arch-blue">
               <span className="w-2 h-2 rounded-full bg-arch-cyan animate-pulse" />
-              <span>Campus Facility Design • Image-to-Image Translation</span>
+              <span>Architecture + Custom Sketch-to-Image</span>
             </div>
 
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-navy-900 font-sans leading-[1.1]">
-              Sketch to <span className="text-transparent bg-clip-text bg-gradient-to-r from-arch-blue via-arch-cyan to-teal-500">Realistic Render</span> Campus Architecture
+              Turn Any Sketch into an <span className="text-transparent bg-clip-text bg-gradient-to-r from-arch-blue via-arch-cyan to-teal-500">Image</span>
             </h1>
 
             <p className="text-base sm:text-lg text-slate-600 leading-relaxed max-w-xl">
-              Turn rough architectural elevations, building concepts, and campus masterplans
-              into realistic concept renders with Stable Diffusion and ControlNet, preserving the structural geometry
-              for university management, board reviews, and donor presentations.
+              Turn architectural drawings into realistic concept renders, or draw any subject and guide image generation with your own positive and negative prompts. Sketch conditioning keeps the output connected to the lines you drew.
             </p>
 
             {/* CTAs */}
@@ -44,10 +43,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate, onOpenArch
               </button>
 
               <button
-                onClick={() => onNavigate('examples')}
-                className="flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl font-semibold text-sm text-navy-900 bg-white hover:bg-canvas-100 border border-slate-300 shadow-subtle transition-all"
+                onClick={onCreateCustom}
+                className="flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl font-semibold text-sm text-arch-blue bg-blue-50 hover:bg-blue-100 border border-blue-200 transition-all"
               >
-                <span>Explore Showcase Examples</span>
+                <Sparkles className="w-4 h-4" />
+                <span>Create from Any Sketch</span>
               </button>
             </div>
 
@@ -73,7 +73,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate, onOpenArch
             <div className="relative">
               {/* Decorative architectural grid background */}
               <div className="absolute -inset-4 bg-gradient-to-tr from-cyan-100/50 to-blue-100/40 rounded-2xl transform rotate-1 -z-10 blur-lg" />
-              
+
               <ComparisonViewer
                 originalUrl="/samples/sketches/academic_block_sketch.png"
                 renderUrl="/samples/renders/academic_block_render.png"
@@ -161,10 +161,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate, onOpenArch
             Generative AI Workflow
           </span>
           <h2 className="text-3xl font-extrabold tracking-tight text-navy-900 font-sans">
-            How CampusVision AI Operates
+            How Sketch-to-Image Works
           </h2>
           <p className="text-sm text-slate-600">
-            A 4-step image-to-image conditioning architecture engineered for structural fidelity.
+            Choose architecture presets or enter custom prompts for another subject; the sketch guides generation in either mode.
           </p>
         </div>
 
@@ -184,9 +184,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate, onOpenArch
             },
             {
               step: '03',
-              title: 'Architectural Synthesis',
-              desc: 'ControlNet conditions the diffusion latent space with your chosen materials, lighting, and architectural style.',
-              badge: 'Diffusion Model',
+              title: 'Prompt-Guided Generation',
+              desc: 'Use architecture style presets or enter your own positive and negative prompts for a custom subject.',
+              badge: 'Architecture + Custom Mode',
             },
             {
               step: '04',
@@ -216,78 +216,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate, onOpenArch
         </div>
       </section>
 
-      {/* 4. Showcase Teaser Grid */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 pb-4 border-b border-canvas-200">
-          <div>
-            <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-arch-cyan">
-              Curated Demonstrations
-            </span>
-            <h2 className="text-2xl font-bold tracking-tight text-navy-900 font-sans mt-0.5">
-              Campus Typology Transformations
-            </h2>
-          </div>
-          <button
-            onClick={() => onNavigate('examples')}
-            className="text-xs font-semibold text-arch-blue hover:underline flex items-center gap-1 font-mono"
-          >
-            View All 6 Case Studies <ChevronRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {[
-            {
-              title: 'Central University Library',
-              style: 'Contemporary Glazed Atrium',
-              sketch: '/samples/sketches/central_library_sketch.png',
-              render: '/samples/renders/central_library_render.png',
-            },
-            {
-              title: 'Biotech Innovation Hub',
-              style: 'Sustainable Green Architecture',
-              sketch: '/samples/sketches/biotech_hub_sketch.png',
-              render: '/samples/renders/biotech_hub_render.png',
-            },
-            {
-              title: 'Convocation Auditorium',
-              style: 'Futuristic Parametric Shell',
-              sketch: '/samples/sketches/auditorium_sketch.png',
-              render: '/samples/renders/auditorium_render.png',
-            },
-          ].map((item) => (
-            <div
-              key={item.title}
-              onClick={() => onNavigate('examples')}
-              className="bg-white rounded-xl border border-canvas-300 shadow-subtle hover:shadow-elevated transition-all overflow-hidden cursor-pointer group"
-            >
-              <div className="aspect-[4/3] bg-slate-900 relative overflow-hidden">
-                <img
-                  src={item.render}
-                  alt={item.title}
-                  className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-300"
-                />
-                <div className="absolute top-2.5 left-2.5 bg-navy-900/80 backdrop-blur-sm text-white px-2 py-0.5 rounded text-[10px] font-mono">
-                  {item.style}
-                </div>
-              </div>
-              <div className="p-4 flex items-center justify-between">
-                <div>
-                  <h4 className="text-sm font-bold text-navy-900 font-sans group-hover:text-arch-blue transition-colors">
-                    {item.title}
-                  </h4>
-                  <p className="text-[11px] text-slate-500 font-mono mt-0.5">
-                    Click to inspect slider
-                  </p>
-                </div>
-                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:translate-x-1 transition-transform" />
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* 5. Master Call to Action Banner */}
+      {/* 4. Master Call to Action Banner */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="rounded-2xl bg-gradient-to-r from-navy-900 via-navy-800 to-arch-blue p-8 sm:p-12 text-white shadow-elevated relative overflow-hidden">
           {/* Subtle background glow */}
@@ -298,11 +227,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate, onOpenArch
               Ready to Visualize
             </span>
             <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight font-sans">
-              Transform Your University Concept Sketch Today
+              Transform a Sketch into an Image
             </h2>
             <p className="text-sm text-slate-200 leading-relaxed">
-              Launch the architectural AI studio to upload sketches, customize facade materials,
-              and diffuse high-fidelity renderings for your upcoming planning committee meeting.
+              Upload or draw a sketch, then choose architecture presets or describe a custom subject with your own prompts.
             </p>
             <div className="pt-2 flex flex-wrap gap-3">
               <button
@@ -310,13 +238,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate, onOpenArch
                 className="px-6 py-3 rounded-xl font-bold text-xs sm:text-sm text-navy-900 bg-white hover:bg-canvas-100 shadow-md transition-all hover:scale-102 flex items-center gap-2"
               >
                 <Sparkles className="w-4 h-4 text-arch-cyan" />
-                <span>Launch Architectural AI Studio</span>
-              </button>
-              <button
-                onClick={() => onNavigate('examples')}
-                className="px-6 py-3 rounded-xl font-semibold text-xs sm:text-sm text-white bg-white/10 hover:bg-white/20 border border-white/20 transition-colors"
-              >
-                Explore Case Studies
+                <span>Launch Sketch-to-Image Studio</span>
               </button>
             </div>
           </div>
