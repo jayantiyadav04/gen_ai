@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { ComparisonMode } from '../../types';
-import { SlidersHorizontal, Columns, Layers, Maximize2, RotateCcw } from 'lucide-react';
+import { SlidersHorizontal, Columns, Layers, Maximize2 } from 'lucide-react';
 
 interface ComparisonViewerProps {
   originalUrl: string;
@@ -9,6 +9,8 @@ interface ComparisonViewerProps {
   title?: string;
   onOpenFullscreen?: () => void;
   aspectRatio?: string;
+  isDemo?: boolean;
+  localConditioning?: boolean;
 }
 
 export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
@@ -17,12 +19,25 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
   edgeUrl,
   title,
   onOpenFullscreen,
-  aspectRatio = 'aspect-[4/3]'
+  aspectRatio = 'aspect-[4/3]',
+  isDemo = false,
+  localConditioning = false,
 }) => {
   const [mode, setMode] = useState<ComparisonMode>('slider');
   const [sliderPos, setSliderPos] = useState(50);
   const [isDragging, setIsDragging] = useState(false);
+  const [containerWidth, setContainerWidth] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (mode !== 'slider' || !containerRef.current) return;
+    const element = containerRef.current;
+    const updateWidth = () => setContainerWidth(element.clientWidth);
+    updateWidth();
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [mode]);
 
   const handleMove = useCallback(
     (clientX: number) => {
@@ -82,6 +97,8 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
         {/* View Mode Toggle */}
         <div className="flex items-center gap-1.5 bg-white p-1 rounded-lg border border-slate-200 shadow-xs">
           <button
+            type="button"
+            aria-label="Show split comparison slider"
             onClick={() => setMode('slider')}
             className={`px-2.5 py-1 text-xs font-medium rounded-md flex items-center gap-1 transition-colors ${
               mode === 'slider'
@@ -94,6 +111,8 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
             <span className="hidden sm:inline">Split Slider</span>
           </button>
           <button
+            type="button"
+            aria-label="Show images side by side"
             onClick={() => setMode('side-by-side')}
             className={`px-2.5 py-1 text-xs font-medium rounded-md flex items-center gap-1 transition-colors ${
               mode === 'side-by-side'
@@ -107,6 +126,8 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
           </button>
           {edgeUrl && (
             <button
+              type="button"
+              aria-label="Show edge overlay"
               onClick={() => setMode('edge-overlay')}
               className={`px-2.5 py-1 text-xs font-medium rounded-md flex items-center gap-1 transition-colors ${
                 mode === 'edge-overlay'
@@ -122,6 +143,8 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
 
           {onOpenFullscreen && (
             <button
+              type="button"
+              aria-label="Open fullscreen comparison"
               onClick={onOpenFullscreen}
               className="p-1 text-slate-500 hover:text-navy-900 hover:bg-slate-100 rounded ml-1"
               title="Fullscreen Zoom"
@@ -148,11 +171,31 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
                 handleTouchStart();
               }
             }}
+            role="slider"
+            tabIndex={0}
+            aria-orientation="horizontal"
+            aria-label="Sketch and render comparison"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(sliderPos)}
+            onKeyDown={(e) => {
+              if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
+                e.preventDefault();
+                setSliderPos((pos) => Math.max(0, pos - 5));
+              } else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                setSliderPos((pos) => Math.min(100, pos + 5));
+              } else if (e.key === 'Home') {
+                setSliderPos(0);
+              } else if (e.key === 'End') {
+                setSliderPos(100);
+              }
+            }}
           >
             {/* Rendered Photoreal Image (Full base) */}
             <img
               src={renderUrl}
-              alt="AI Campus Render"
+              alt={isDemo ? 'Procedural demo illustration' : 'AI-generated concept render'}
               className="absolute inset-0 w-full h-full object-cover"
             />
 
@@ -166,7 +209,7 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
                 alt="Original Concept Sketch"
                 className="absolute inset-0 w-full h-full object-cover max-w-none"
                 style={{
-                  width: containerRef.current ? `${containerRef.current.clientWidth}px` : '100%',
+                  width: `${containerWidth || containerRef.current?.clientWidth || 0}px`,
                 }}
               />
               {/* Badge: Original Sketch */}
@@ -176,8 +219,8 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
             </div>
 
             {/* Badge: Photoreal Render */}
-            <div className="absolute top-3 right-3 bg-emerald-950/80 backdrop-blur-sm text-emerald-300 border border-emerald-500/40 px-2.5 py-1 rounded text-[11px] font-mono font-medium shadow-md">
-              AI Render
+              <div className="absolute top-3 right-3 bg-emerald-950/80 backdrop-blur-sm text-emerald-300 border border-emerald-500/40 px-2.5 py-1 rounded text-[11px] font-mono font-medium shadow-md">
+              {isDemo ? 'Demo Illustration' : 'AI Render'}
             </div>
 
             {/* Draggable Divider Handle */}
@@ -215,11 +258,11 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
             <div className="relative aspect-[4/3] bg-slate-950 flex flex-col items-center justify-center">
               <img
                 src={renderUrl}
-                alt="AI Render"
+                alt={isDemo ? 'Procedural demo illustration' : 'AI-generated concept render'}
                 className="w-full h-full object-cover"
               />
-              <div className="absolute top-3 right-3 bg-emerald-950/85 backdrop-blur-sm text-emerald-300 border border-emerald-500/40 px-2.5 py-1 rounded text-[11px] font-mono font-semibold">
-                AI Render
+                <div className="absolute top-3 right-3 bg-emerald-950/85 backdrop-blur-sm text-emerald-300 border border-emerald-500/40 px-2.5 py-1 rounded text-[11px] font-mono font-semibold">
+                {isDemo ? 'Demo Illustration' : 'AI Render'}
               </div>
             </div>
           </div>
@@ -230,20 +273,20 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
             {/* Base Photoreal Render */}
             <img
               src={renderUrl}
-              alt="AI Render"
+              alt={isDemo ? 'Procedural demo illustration' : 'AI-generated concept render'}
               className="absolute inset-0 w-full h-full object-cover"
             />
             {/* Superimposed OpenCV Canny Edges in Blueprint Cyan */}
             <img
               src={edgeUrl}
-              alt="OpenCV Structural Edge Condition"
+              alt="OpenCV edge preview from the uploaded sketch"
               className="absolute inset-0 w-full h-full object-cover mix-blend-screen opacity-85 filter hue-rotate-180 brightness-150 contrast-200"
             />
-            <div className="absolute top-3 left-3 bg-navy-900/90 border border-cyan-400/50 backdrop-blur-sm text-cyan-300 px-3 py-1 rounded text-[11px] font-mono font-bold shadow-lg">
-              Structural Edge Verification (OpenCV Canny Overlay)
+              <div className="absolute top-3 left-3 bg-navy-900/90 border border-cyan-400/50 backdrop-blur-sm text-cyan-300 px-3 py-1 rounded text-[11px] font-mono font-bold shadow-lg">
+              {localConditioning ? 'OpenCV Preview (ComfyUI recomputes Canny)' : 'Structural Edge Preview (OpenCV Canny)'}
             </div>
             <div className="absolute bottom-3 left-3 right-3 bg-navy-900/85 backdrop-blur-sm text-slate-300 p-2 rounded text-[11px] border border-slate-700">
-              <span className="text-cyan-400 font-semibold">Verification:</span> Cyan contours demonstrate exact geometric alignment between the uploaded sketch contours and the diffused architectural facade.
+              <span className="text-cyan-400 font-semibold">Preview:</span> Cyan contours show the uploaded sketch's OpenCV edges for visual reference.
             </div>
           </div>
         )}

@@ -9,6 +9,8 @@ interface FullscreenModalProps {
   renderUrl: string;
   edgeUrl?: string;
   title?: string;
+  isDemo?: boolean;
+  localConditioning?: boolean;
 }
 
 export const FullscreenModal: React.FC<FullscreenModalProps> = ({
@@ -18,6 +20,8 @@ export const FullscreenModal: React.FC<FullscreenModalProps> = ({
   renderUrl,
   edgeUrl,
   title,
+  isDemo,
+  localConditioning,
 }) => {
   const [zoom, setZoom] = useState(1);
 
@@ -32,7 +36,7 @@ export const FullscreenModal: React.FC<FullscreenModalProps> = ({
             {title || 'Architectural Visualization Inspector'}
           </h3>
           <p className="text-xs text-slate-400 font-mono">
-            High-Resolution Structural Comparison & Verification
+            Sketch and render comparison
           </p>
         </div>
 
@@ -40,6 +44,7 @@ export const FullscreenModal: React.FC<FullscreenModalProps> = ({
           {/* Zoom controls */}
           <div className="flex items-center gap-1 bg-navy-800 border border-slate-700 rounded-lg p-1">
             <button
+              aria-label="Zoom out"
               onClick={() => setZoom((z) => Math.max(0.75, z - 0.25))}
               className="p-1 text-slate-300 hover:text-white rounded hover:bg-slate-700"
               title="Zoom Out"
@@ -50,6 +55,7 @@ export const FullscreenModal: React.FC<FullscreenModalProps> = ({
               {Math.round(zoom * 100)}%
             </span>
             <button
+              aria-label="Zoom in"
               onClick={() => setZoom((z) => Math.min(2.5, z + 0.25))}
               className="p-1 text-slate-300 hover:text-white rounded hover:bg-slate-700"
               title="Zoom In"
@@ -57,6 +63,7 @@ export const FullscreenModal: React.FC<FullscreenModalProps> = ({
               <ZoomIn className="w-4 h-4" />
             </button>
             <button
+              aria-label="Reset zoom"
               onClick={() => setZoom(1)}
               className="p-1 text-slate-400 hover:text-white rounded hover:bg-slate-700 ml-1"
               title="Reset Zoom"
@@ -66,6 +73,7 @@ export const FullscreenModal: React.FC<FullscreenModalProps> = ({
           </div>
 
           <button
+            aria-label="Close comparison"
             onClick={onClose}
             className="p-1.5 rounded-lg bg-navy-800 text-slate-300 hover:text-white hover:bg-slate-700 border border-slate-700"
           >
@@ -85,6 +93,8 @@ export const FullscreenModal: React.FC<FullscreenModalProps> = ({
             renderUrl={renderUrl}
             edgeUrl={edgeUrl}
             title={title}
+            isDemo={isDemo}
+            localConditioning={localConditioning}
             aspectRatio="aspect-[16/10]"
           />
         </div>

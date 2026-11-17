@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { AppConfig } from '../types';
-import { updateConfig, testProvider } from '../api/client';
+import { updateConfig, testProvider, getConfig } from '../api/client';
 import { X, Key, CheckCircle2, AlertTriangle, ExternalLink, ShieldCheck, Sparkles, RefreshCw, Cpu } from 'lucide-react';
 
 interface SettingsModalProps {
@@ -24,6 +24,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [testingProvider, setTestingProvider] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<{ provider: string; valid: boolean; message: string } | null>(null);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const localSelected = provider === 'comfyui' || provider === 'local';
+  const demoSelected = provider === 'demo';
+  const selectedCloudLabel = provider === 'replicate' ? 'Replicate selected'
+    : provider === 'huggingface' || provider === 'hf' ? 'Hugging Face selected'
+      : provider === 'fal' || provider === 'fal_ai' ? 'Fal.ai selected'
+        : provider === 'auto' ? 'Automatic provider selection'
+          : 'Generation engine selected';
 
   // Keep the dropdown in sync with the real saved engine (config loads after first render)
   useEffect(() => {
@@ -71,31 +78,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       if (falKey.trim()) payload.fal_key = falKey.trim();
 
       await updateConfig(payload);
+      const latestConfig = await getConfig();
+      onConfigUpdated(latestConfig);
       setFeedback({ type: 'success', message: 'Settings successfully saved.' });
-
-      if (config) {
-        const hasRep = Boolean(replicateToken.trim() || config.has_replicate_token);
-        const hasHf = Boolean(hfKey.trim() || config.has_huggingface_key);
-        const hasFal = Boolean(falKey.trim() || config.has_fal_key);
-        const isLocalEngine = provider === 'comfyui' || provider === 'local';
-        const isDemo = provider === 'demo' || (!isLocalEngine && !hasRep && !hasHf && !hasFal);
-
-        onConfigUpdated({
-          ...config,
-          default_provider: provider,
-          has_replicate_token: hasRep,
-          has_huggingface_key: hasHf,
-          has_fal_key: hasFal,
-          is_demo_mode: isDemo,
-          active_provider_label: isLocalEngine
-            ? 'Local ComfyUI (SD 1.5 + ControlNet Canny)'
-            : hasRep
-              ? 'Replicate SDXL ControlNet (lucataco/sdxl-controlnet)'
-              : isDemo
-                ? 'Demo Simulation Mode (Offline Procedural)'
-                : 'Secondary AI Provider',
-        });
-      }
       setTimeout(() => {
         onClose();
       }, 1000);
@@ -125,6 +110,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           </div>
           <button
+            aria-label="Close settings"
             onClick={onClose}
             className="p-1 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
           >
@@ -136,27 +122,29 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         <form onSubmit={handleSave} className="p-6 space-y-5 overflow-y-auto">
           {/* Active Mode Notice */}
           <div
-            className={`p-3.5 rounded-lg border text-xs leading-relaxed ${config?.is_demo_mode
+                className={`p-3.5 rounded-lg border text-xs leading-relaxed ${demoSelected
               ? 'bg-amber-50/70 border-amber-200 text-amber-900'
               : 'bg-emerald-50/70 border-emerald-200 text-emerald-900'
               }`}
           >
             <div className="flex items-start gap-2">
-              {config?.is_demo_mode ? (
+              {demoSelected ? (
                 <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
               ) : (
                 <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
               )}
               <div>
                 <p className="font-semibold">
-                  Status: {config?.is_demo_mode ? 'Demo Architectural Engine Active' : provider === 'comfyui' || provider === 'local' ? 'Local ComfyUI Engine Selected' : 'Cloud GPU Connected'}
+                  Status: {demoSelected ? 'Demo Architectural Engine Selected' : localSelected ? 'Local ComfyUI Engine Selected' : selectedCloudLabel}
                 </p>
                 <p className="mt-0.5 text-slate-600">
-                  {config?.is_demo_mode
-                    ? 'Currently in offline mode. Choose Local ComfyUI below, or add a cloud API token.'
-                    : provider === 'comfyui' || provider === 'local'
+                  {demoSelected
+                    ? 'Offline procedural illustrations are used. Select a diffusion engine for model-generated images.'
+                    : localSelected
                       ? 'Images are generated on this computer. Keep ComfyUI Desktop open. The first image is slower while the models load.'
-                      : 'System is connected to a cloud GPU provider for ControlNet architectural diffusion.'}
+                      : provider === 'auto'
+                        ? 'Uses Replicate, then Hugging Face, then Fal.ai when configured; otherwise uses local ComfyUI.'
+                        : 'The selected provider is used for generation; add its API key below if it is not configured.'}
                 </p>
               </div>
             </div>
@@ -173,11 +161,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               className="w-full text-xs font-medium px-3 py-2 bg-canvas-50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-arch-cyan"
             >
               <option value="comfyui">Local ComfyUI (Free: Stable Diffusion 1.5 + ControlNet Canny)</option>
-
-
+              <option value="auto">Auto (cloud key priority, then local ComfyUI)</option>
+              <option value="replicate">Replicate SDXL ControlNet</option>
+              <option value="huggingface">Hugging Face Inference API</option>
+              <option value="fal">Fal.ai SDXL Image-to-Image</option>
               <option value="demo">Demo Simulation Mode (Explicit offline procedural testing)</option>
-
-
             </select>
             {(provider === 'comfyui' || provider === 'local') && (
               <div className="mt-2 flex items-center gap-2">
@@ -209,7 +197,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </div>
 
           {/* Replicate Token Input (PRIMARY) */}
-          <div className="hidden space-y-1.5 bg-blue-50/50 p-3.5 rounded-lg border border-blue-200">
+          <div className="space-y-1.5 bg-blue-50/50 p-3.5 rounded-lg border border-blue-200">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
                 <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-navy-900 text-cyan-300">
@@ -288,6 +276,40 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 ) : (
                   <span>Test Key</span>
                 )}
+              </button>
+            </div>
+          </div>
+
+          {/* Fal.ai credential */}
+          <div className="space-y-1.5 bg-canvas-50/60 p-3 rounded-lg border border-slate-200">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-navy-900 uppercase tracking-wider font-sans">
+                Fal.ai API Key
+              </label>
+              <a
+                href="https://fal.ai/dashboard/keys"
+                target="_blank"
+                rel="noreferrer"
+                className="text-[11px] text-arch-cyan hover:underline flex items-center gap-1 font-medium"
+              >
+                Get Key <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="password"
+                placeholder={config?.has_fal_key ? '•••••••••••••••• (Configured)' : 'Fal key'}
+                value={falKey}
+                onChange={(e) => setFalKey(e.target.value)}
+                className="flex-1 text-xs px-3 py-2 bg-white border border-slate-200 rounded-lg text-slate-800 font-mono placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-arch-cyan"
+              />
+              <button
+                type="button"
+                onClick={() => handleTestKey('fal', falKey)}
+                disabled={testingProvider === 'fal'}
+                className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg shadow-2xs transition-colors shrink-0 flex items-center gap-1"
+              >
+                {testingProvider === 'fal' ? <RefreshCw className="w-3 h-3 animate-spin text-arch-cyan" /> : <span>Test Key</span>}
               </button>
             </div>
           </div>

@@ -11,18 +11,44 @@ interface ResultsViewProps {
   project: ArchitecturalProject;
   onBackToStudio: () => void;
   onRegenerate: () => void;
+  isGenerating?: boolean;
+  generationError?: string | null;
 }
 
 export const ResultsView: React.FC<ResultsViewProps> = ({
   project,
   onBackToStudio,
   onRegenerate,
+  isGenerating = false,
+  generationError,
 }) => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isBoardOpen, setIsBoardOpen] = useState(false);
   const [isFav, setIsFav] = useState(project.is_favorite);
   const [isCopied, setIsCopied] = useState(false);
   const isCustomSketch = project.building_type === 'Custom Sketch' || project.style === 'Custom';
+  const providerName = project.provider.toLowerCase();
+  const isFal = providerName.includes('fal');
+  const isHuggingFace = providerName.includes('hugging face');
+  const isComfyUI = providerName.includes('comfyui');
+  const isDemo = project.is_demo_mode;
+  const controlnetLabel = isDemo || isFal
+    ? 'Not used by this engine'
+    : isHuggingFace
+      ? 'Provider dependent (may fall back to text-only)'
+      : isComfyUI || providerName.includes('replicate')
+        ? project.controlnet_strength.toFixed(2)
+        : 'Not reported';
+  const denoisingLabel = isDemo
+    ? 'Not used by this engine'
+    : isFal
+      ? project.denoising_strength.toFixed(2)
+      : isComfyUI
+        ? 'Fixed at 1.0 in workflow'
+        : 'Not supported by this engine';
+  const seedLabel = isDemo || isFal || isHuggingFace
+    ? 'Not supported by this engine'
+    : String(project.seed);
 
   useEffect(() => {
     try {
@@ -91,6 +117,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
         {/* Action Buttons */}
         <div className="flex items-center gap-2 flex-wrap">
           <button
+            aria-label={isFav ? 'Remove from favorites' : 'Add to favorites'}
             onClick={handleToggleFav}
             className={`p-2 rounded-lg border text-xs font-medium flex items-center gap-1.5 transition-colors ${
               isFav
@@ -113,10 +140,11 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
 
           <button
             onClick={onRegenerate}
+            disabled={isGenerating}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg shadow-2xs transition-colors"
           >
             <RefreshCw className="w-3.5 h-3.5 text-arch-cyan" />
-            Regenerate Variation
+            {isGenerating ? 'Generating Variation…' : 'Regenerate Variation'}
           </button>
 
           <button
@@ -135,9 +163,17 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
         renderUrl={project.render_url}
         edgeUrl={project.edge_url}
         title={project.title}
+        isDemo={project.is_demo_mode}
+        localConditioning={project.provider.toLowerCase().includes('comfyui')}
         onOpenFullscreen={() => setIsFullscreen(true)}
         aspectRatio="aspect-[16/10]"
       />
+
+      {generationError && (
+        <div role="alert" className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-800">
+          {generationError}
+        </div>
+      )}
 
       {/* Generation Metadata & Technical Architecture Card */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
@@ -151,19 +187,19 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
           <div className="space-y-2.5 text-xs font-mono">
             <div className="flex justify-between py-1 border-b border-canvas-200">
               <span className="text-slate-500">ControlNet Guidance:</span>
-              <span className="font-bold text-navy-900">{project.controlnet_strength.toFixed(2)}</span>
+              <span className="font-bold text-navy-900">{controlnetLabel}</span>
             </div>
             <div className="flex justify-between py-1 border-b border-canvas-200">
               <span className="text-slate-500">Denoising Strength:</span>
-              <span className="font-bold text-navy-900">{project.denoising_strength.toFixed(2)}</span>
+              <span className="font-bold text-navy-900">{denoisingLabel}</span>
             </div>
             <div className="flex justify-between py-1 border-b border-canvas-200">
               <span className="text-slate-500">Guidance Scale (CFG):</span>
-              <span className="font-bold text-navy-900">{project.guidance_scale.toFixed(1)}</span>
+              <span className="font-bold text-navy-900">{isDemo ? 'Not used by this engine' : project.guidance_scale.toFixed(1)}</span>
             </div>
             <div className="flex justify-between py-1 border-b border-canvas-200">
               <span className="text-slate-500">Seed:</span>
-              <span className="font-bold text-navy-900">{project.seed}</span>
+              <span className="font-bold text-navy-900">{seedLabel}</span>
             </div>
             <div className="flex justify-between py-1 border-b border-canvas-200">
               <span className="text-slate-500">Resolution & Ratio:</span>
@@ -231,6 +267,11 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
               </div>
             </div>
           )}
+          {isDemo && (
+            <p className="text-[10px] text-amber-800 bg-amber-50 border border-amber-200 rounded p-2">
+              Demo output is procedural. The displayed prompts and diffusion controls are saved for reference but do not drive this illustration.
+            </p>
+          )}
 
           {/* Download options */}
           <div className="flex items-center gap-4 pt-2">
@@ -260,6 +301,8 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
         renderUrl={project.render_url}
         edgeUrl={project.edge_url}
         title={project.title}
+        isDemo={project.is_demo_mode}
+        localConditioning={project.provider.toLowerCase().includes('comfyui')}
       />
 
       {/* Official Review Board Sheet Modal */}

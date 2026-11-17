@@ -56,7 +56,8 @@ export const App: React.FC = () => {
         currentTab={currentTab}
         onTabChange={(tab) => {
           if (tab === 'studio' && currentTab !== 'studio') {
-            // Keep preset or clear
+            openStudioWith(null);
+            return;
           }
           setCurrentTab(tab);
           window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -71,6 +72,10 @@ export const App: React.FC = () => {
         {currentTab === 'landing' && (
           <LandingPage
             onNavigate={(tab) => {
+              if (tab === 'studio') {
+                openStudioWith(null);
+                return;
+              }
               setCurrentTab(tab);
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}

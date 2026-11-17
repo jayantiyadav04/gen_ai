@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { PreprocessResult, GenerationResult, ArchitecturalProject, AppConfig, ExampleCase, StudioPreset } from '../../types';
 import { SketchUploader } from './SketchUploader';
 import { PromptBuilderPanel } from './PromptBuilderPanel';
 import { CustomSketchPromptPanel } from './CustomSketchPromptPanel';
 import { AdvancedControls } from './AdvancedControls';
 import { GenerationProgress } from './GenerationProgress';
-import { isLocalProvider } from '../../utils/provider';
+import { effectiveProvider, engineBadge, isLocalProvider } from '../../utils/provider';
 import { ResultsView } from '../Results/ResultsView';
 import { generateRender, preprocessSketchUrl } from '../../api/client';
 import { Sparkles, AlertCircle, RefreshCw } from 'lucide-react';
@@ -60,17 +60,23 @@ export const Studio: React.FC<StudioProps> = ({ config, onOpenSettings, preset }
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [activeProject, setActiveProject] = useState<ArchitecturalProject | null>(null);
+  const sketchLoadRequest = useRef(0);
+  const generationInFlight = useRef(false);
 
   const loadSketchFromUrl = async (url: string) => {
+    const requestId = ++sketchLoadRequest.current;
     setIsLoadingSketch(true);
     setSketchError(null);
     try {
-      setCurrentSketch(await preprocessSketchUrl(url));
+      const sketch = await preprocessSketchUrl(url);
+      if (requestId === sketchLoadRequest.current) setCurrentSketch(sketch);
     } catch (err: any) {
-      setCurrentSketch(null);
-      setSketchError(err.message || 'Could not load the sketch.');
+      if (requestId === sketchLoadRequest.current) {
+        setCurrentSketch(null);
+        setSketchError(err.message || 'Could not load the sketch.');
+      }
     } finally {
-      setIsLoadingSketch(false);
+      if (requestId === sketchLoadRequest.current) setIsLoadingSketch(false);
     }
   };
 
@@ -100,10 +106,12 @@ export const Studio: React.FC<StudioProps> = ({ config, onOpenSettings, preset }
   };
 
   const handleGenerate = async (providerOverride?: string) => {
+    if (generationInFlight.current) return;
     if (promptMode === 'custom' && !customPositivePrompt.trim()) {
       setGenerationError('Enter a positive prompt describing what your custom sketch should become.');
       return;
     }
+    generationInFlight.current = true;
     setGenerationError(null);
     setIsGenerating(true);
 
@@ -136,6 +144,7 @@ export const Studio: React.FC<StudioProps> = ({ config, onOpenSettings, preset }
     } catch (err: any) {
       setGenerationError(err.message || 'Generation failed. Please try again.');
     } finally {
+      generationInFlight.current = false;
       setIsGenerating(false);
     }
   };
@@ -148,6 +157,8 @@ export const Studio: React.FC<StudioProps> = ({ config, onOpenSettings, preset }
           project={activeProject}
           onBackToStudio={() => setActiveProject(null)}
           onRegenerate={handleGenerate}
+          isGenerating={isGenerating}
+          generationError={generationError}
         />
       ) : (
         <div className="space-y-6">
@@ -172,7 +183,7 @@ export const Studio: React.FC<StudioProps> = ({ config, onOpenSettings, preset }
                     : 'bg-emerald-50 border-emerald-200 text-emerald-800'
                 }`}
               >
-                {config?.is_demo_mode ? 'Demo Engine (Offline Procedural)' : isLocalProvider(config) ? 'Local Stable Diffusion 1.5 + ControlNet' : 'Cloud GPU Diffusion'}
+                {engineBadge(config)}
               </span>
             </div>
           </div>
@@ -215,10 +226,21 @@ export const Studio: React.FC<StudioProps> = ({ config, onOpenSettings, preset }
           {/* 1. Sketch Uploader */}
           <SketchUploader
             currentSketch={currentSketch}
-            onSketchProcessed={(res) => { setCurrentSketch(res); setSketchError(null); setProjectTitle(undefined); }}
-            onClearSketch={() => setCurrentSketch(null)}
+            onSketchProcessed={(res) => {
+              sketchLoadRequest.current += 1;
+              setIsLoadingSketch(false);
+              setCurrentSketch(res);
+              setSketchError(null);
+              setProjectTitle(undefined);
+            }}
+            onClearSketch={() => {
+              sketchLoadRequest.current += 1;
+              setIsLoadingSketch(false);
+              setCurrentSketch(null);
+            }}
             onSelectExample={handleSelectExample}
             selectedSketchUrl={currentSketch?.sketch_url}
+            isLocal={isLocalProvider(config)}
           />
           {isLoadingSketch && (
             <p className="text-xs text-slate-500 font-mono">Preparing sketch and edge map…</p>
@@ -260,7 +282,7 @@ export const Studio: React.FC<StudioProps> = ({ config, onOpenSettings, preset }
             guidanceScale={guidanceScale}
             onGuidanceScaleChange={setGuidanceScale}
             seed={seed}
-            isLocal={isLocalProvider(config)}
+            provider={effectiveProvider(config)}
             onSeedChange={setSeed}
             resolution={resolution}
             onResolutionChange={setResolution}
@@ -275,6 +297,7 @@ export const Studio: React.FC<StudioProps> = ({ config, onOpenSettings, preset }
               isGenerating={isGenerating}
               providerLabel={config?.active_provider_label}
               isLocal={isLocalProvider(config)}
+              isDemo={config?.is_demo_mode}
             />
           )}
 
@@ -292,6 +315,7 @@ export const Studio: React.FC<StudioProps> = ({ config, onOpenSettings, preset }
                 <button
                   type="button"
                   onClick={() => handleGenerate()}
+                  disabled={isGenerating}
                   className="px-3.5 py-2 rounded-lg bg-arch-blue text-white font-semibold text-xs hover:bg-blue-700 transition-colors shadow-xs flex items-center gap-1"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
@@ -300,6 +324,7 @@ export const Studio: React.FC<StudioProps> = ({ config, onOpenSettings, preset }
                 <button
                   type="button"
                   onClick={onOpenSettings}
+                  disabled={isGenerating}
                   className="px-3.5 py-2 rounded-lg bg-white border border-rose-300 text-rose-900 font-semibold text-xs hover:bg-rose-100 transition-colors shadow-xs"
                 >
                   Configure API Token
@@ -307,6 +332,7 @@ export const Studio: React.FC<StudioProps> = ({ config, onOpenSettings, preset }
                 {promptMode === 'architecture' && <button
                   type="button"
                   onClick={() => handleGenerate('demo')}
+                  disabled={isGenerating}
                   className="px-3.5 py-2 rounded-lg bg-navy-900 text-white font-semibold text-xs hover:bg-navy-800 transition-colors shadow-xs"
                 >
                   Run Demo Simulation

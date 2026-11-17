@@ -10,6 +10,7 @@ interface SketchUploaderProps {
   onClearSketch: () => void;
   onSelectExample: (example: ExampleCase) => void;
   selectedSketchUrl?: string;
+  isLocal?: boolean;
 }
 
 export const SketchUploader: React.FC<SketchUploaderProps> = ({
@@ -18,6 +19,7 @@ export const SketchUploader: React.FC<SketchUploaderProps> = ({
   onClearSketch,
   onSelectExample,
   selectedSketchUrl,
+  isLocal = false,
 }) => {
   // Preloaded sketches come from the backend, together with the style, lighting, materials and prompt
   // that belong to each one, so picking a sketch can configure the whole Studio.
@@ -247,6 +249,11 @@ export const SketchUploader: React.FC<SketchUploaderProps> = ({
               <span>Structural conditioning ready ({Math.round(currentSketch.edge_density * 1000) / 10}% line density)</span>
             </div>
           </div>
+          {isLocal && (
+            <p className="text-[10px] text-slate-500">
+              This OpenCV edge map is an inspection preview. Local ComfyUI runs its own Canny step on the original sketch.
+            </p>
+          )}
         </div>
       )}
 

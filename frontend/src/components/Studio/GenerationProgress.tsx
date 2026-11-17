@@ -5,6 +5,7 @@ interface GenerationProgressProps {
   isGenerating: boolean;
   providerLabel?: string;
   isLocal?: boolean;
+  isDemo?: boolean;
 }
 
 const REAL_PIPELINE_PHASES = [
@@ -17,15 +18,15 @@ const REAL_PIPELINE_PHASES = [
   },
   {
     phase: 'Submission',
-    title: 'Sending Job to the AI Engine',
-    detail: 'Sending the edge map and the prompt to the image generation engine',
+    title: 'Submitting Sketch and Prompt',
+    detail: 'Sending the sketch and prompt to the selected image generation engine.',
     icon: Cpu,
     minTime: 2,
   },
   {
     phase: 'Inference',
-    title: 'Stable Diffusion + ControlNet',
-    detail: 'Generating the image step by step, guided by the sketch edge map',
+    title: 'Model Image Generation',
+    detail: 'The selected provider is generating an image using its configured sketch-conditioning method.',
     icon: Sparkles,
     minTime: 6,
   },
@@ -38,8 +39,8 @@ const REAL_PIPELINE_PHASES = [
   },
   {
     phase: 'Finalizing',
-    title: 'Archival & Presentation Ready',
-    detail: 'Storing generation record in SQLite database and rendering before/after suite',
+    title: 'Saving the Result',
+    detail: 'Saving the generated image and adding its record to project history.',
     icon: Eye,
     minTime: 24,
   },
@@ -52,6 +53,7 @@ export const GenerationProgress: React.FC<GenerationProgressProps> = ({
   isGenerating,
   providerLabel,
   isLocal,
+  isDemo = false,
 }) => {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
@@ -70,15 +72,31 @@ export const GenerationProgress: React.FC<GenerationProgressProps> = ({
 
   if (!isGenerating) return null;
 
+  const demoPhases = [
+    { phase: 'Sketch', title: 'Reading the Uploaded Sketch', detail: 'Preparing the sketch edges for a procedural illustration.', icon: Layers, minTime: 0 },
+    { phase: 'Drawing', title: 'Building a Demo Illustration', detail: 'The Demo engine draws a simplified architectural illustration; it does not run diffusion or use prompts.', icon: Cpu, minTime: 2 },
+    { phase: 'Finishing', title: 'Finishing the Illustration', detail: 'Applying procedural colors and saving the offline demonstration image.', icon: Sparkles, minTime: 5 },
+    { phase: 'Saving', title: 'Saving the Result', detail: 'Adding the demo image to project history.', icon: Download, minTime: 8 },
+    { phase: 'Ready', title: 'Preparing the Comparison', detail: 'Preparing the sketch and demo illustration for comparison.', icon: Eye, minTime: 12 },
+  ];
+  const phases = isDemo ? demoPhases : REAL_PIPELINE_PHASES;
+
   // Determine active phase based on elapsed real-world time
-  const currentPhaseIndex = REAL_PIPELINE_PHASES.reduce((acc, stage, idx) => {
+  const currentPhaseIndex = phases.reduce((acc, stage, idx) => {
     const start = isLocal ? LOCAL_PHASE_START[idx] : stage.minTime;
     if (elapsedSeconds >= start) return idx;
     return acc;
   }, 0);
 
-  const activePhase = REAL_PIPELINE_PHASES[currentPhaseIndex];
+  const activePhase = phases[currentPhaseIndex];
   const ActiveIcon = activePhase.icon;
+  const activeDetail = isLocal
+    ? currentPhaseIndex === 0
+      ? 'Checking the prepared sketch; ComfyUI will resize it and run its own Canny step.'
+      : currentPhaseIndex === 1
+        ? 'Sending the original sketch and prompts to ComfyUI; the site edge map is only an inspection preview.'
+        : activePhase.detail
+    : activePhase.detail;
 
   const formatTimer = (totalSec: number) => {
     const mins = Math.floor(totalSec / 60);
@@ -101,7 +119,7 @@ export const GenerationProgress: React.FC<GenerationProgressProps> = ({
               </h4>
             </div>
             <p className="text-xs text-slate-500 font-mono mt-0.5">
-              {providerLabel || 'Active AI Pipeline'} &bull; Phase {currentPhaseIndex + 1} of 5
+              {providerLabel || 'Active AI Pipeline'} &bull; Phase {currentPhaseIndex + 1} of {phases.length}
             </p>
           </div>
         </div>
@@ -117,14 +135,14 @@ export const GenerationProgress: React.FC<GenerationProgressProps> = ({
       <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-600 flex items-center gap-2">
         <span className="font-semibold text-navy-900">Current Action:</span>
         <span className="text-slate-700">
-          {activePhase.detail}
-          {isLocal && currentPhaseIndex === 2 ? ' (running on this computer, usually 1-3 minutes; the first run is slower)' : ''}
+          {activeDetail}
+          {isLocal && currentPhaseIndex === 2 ? ' (running on this computer; it can take a few minutes, especially on the first run)' : ''}
         </span>
       </div>
 
       {/* Stepper feedback across all 5 genuine pipeline stages */}
       <div className="grid grid-cols-1 sm:grid-cols-5 gap-2 pt-1">
-        {REAL_PIPELINE_PHASES.map((st, idx) => {
+        {phases.map((st, idx) => {
           const isDone = currentPhaseIndex > idx;
           const isCurrent = currentPhaseIndex === idx;
           return (

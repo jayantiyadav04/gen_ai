@@ -23,6 +23,7 @@ from backend.services.prompt_builder import (
 from backend.services.cache import global_cache, CampusVisionCache
 from backend.database import get_setting
 from backend.services.comfyui_client import ComfyUIClient
+from backend.services.provider_resolver import resolve_provider
 
 logger = logging.getLogger("campusvision.generator")
 
@@ -174,7 +175,7 @@ class ArchitecturalGenerator:
         Executes the architectural image-to-image pipeline:
         1. Compiles intelligent architectural prompt
         2. Detects provider (Replicate / Hugging Face / Fal / Demo Mode)
-        3. Generates the photorealistic campus visualization using genuine ControlNet conditioning
+        3. Generates an image using the selected engine and its supported sketch-conditioning method
         4. Saves and returns detailed generation metadata
         """
         start_time = time.time()
@@ -193,15 +194,13 @@ class ArchitecturalGenerator:
 
         # "auto": cloud token first (Replicate, Hugging Face, Fal), otherwise local ComfyUI if it is running
         if target_provider == "auto":
-            if _usable(replicate_token):
-                target_provider = "replicate"
-            elif _usable(hf_key):
-                target_provider = "huggingface"
-            elif _usable(fal_key):
-                target_provider = "fal"
-            elif (await ComfyUIClient.check_status())["reachable"]:
-                target_provider = "comfyui"
-            else:
+            target_provider = resolve_provider(
+                target_provider,
+                _usable(replicate_token),
+                _usable(hf_key),
+                _usable(fal_key),
+            )
+            if target_provider in ("comfyui", "local") and not (await ComfyUIClient.check_status())["reachable"]:
                 if (prompt_mode or "architecture").strip().lower() == "custom":
                     raise HTTPException(
                         status_code=400,
@@ -264,7 +263,6 @@ class ArchitecturalGenerator:
         model_name_label = None
         model_version_label = None
         used_seed = None
-        local_aspect = None
         structure_lost = False
 
         # Local ComfyUI now conditions on the original sketch and runs its own Canny node.
@@ -344,7 +342,7 @@ class ArchitecturalGenerator:
                 save_path=str(render_path)
             )
             active_provider = f"Replicate SDXL ControlNet ({settings.replicate_model})"
-            status_message = "Photorealistic render generated live via Replicate Cloud GPU ControlNet."
+            status_message = "Concept image generated via Replicate with ControlNet conditioning."
 
         # -------------------------------------------------------------
         # BRANCH C: Hugging Face (Secondary Provider)
@@ -372,7 +370,7 @@ class ArchitecturalGenerator:
                 "Hugging Face could not run ControlNet, so plain SDXL text-to-image was used. "
                 "The sketch's structure was NOT preserved; use Local ComfyUI or Replicate for faithful renders."
                 if structure_lost else
-                "Photorealistic render generated live via Hugging Face Inference API."
+                "Concept image generated via Hugging Face Inference API with sketch conditioning."
             )
 
         # -------------------------------------------------------------
@@ -395,7 +393,7 @@ class ArchitecturalGenerator:
                 save_path=str(render_path)
             )
             active_provider = "Fal.ai Fast SDXL Img2Img (Live Cloud GPU)"
-            status_message = "Photorealistic render generated live via Fal.ai Cloud API."
+            status_message = "Concept image generated via Fal.ai image-to-image."
 
         # -------------------------------------------------------------
         # BRANCH E: Local ComfyUI (free, runs on this machine)
@@ -413,11 +411,10 @@ class ArchitecturalGenerator:
             )
             used_seed = comfy["seed"]
             resolution = f"{comfy['width']}x{comfy['height']}"
-            local_aspect = f"{comfy['width']}:{comfy['height']}"
             active_provider = "Local ComfyUI (SD 1.5 + ControlNet Canny)"
             model_name_label = "SD 1.5 + ControlNet Canny (local ComfyUI)"
             model_version_label = settings.comfyui_checkpoint
-            status_message = f"Photorealistic render generated locally via ComfyUI at {comfy['width']}x{comfy['height']}."
+            status_message = f"Concept image generated locally via ComfyUI at {comfy['width']}x{comfy['height']}."
 
         else:
             raise HTTPException(
@@ -426,20 +423,20 @@ class ArchitecturalGenerator:
             )
 
         elapsed = round(time.time() - start_time, 2)
-        
-        # Calculate aspect ratio based on edge map
+
+        # Report dimensions that the engine actually saved, not the requested UI value.
         aspect_ratio = "4:3"
         try:
-            edge_img = cv2.imread(edge_path)
-            if edge_img is not None:
-                eh, ew = edge_img.shape[:2]
-                from backend.services.image_processor import ImageProcessor
-                _, _, aspect_ratio, _ = ImageProcessor.select_sdxl_bucket(ew, eh)
-        except Exception:
-            pass
-
-        if local_aspect:
-            aspect_ratio = local_aspect
+            with Image.open(render_path) as rendered_image:
+                output_width, output_height = rendered_image.size
+            resolution = f"{output_width}x{output_height}"
+            from math import gcd
+            divisor = gcd(output_width, output_height) or 1
+            aspect_ratio = f"{output_width // divisor}:{output_height // divisor}"
+        except Exception as image_metadata_error:
+            logger.warning("Could not read generated image dimensions: %s", image_metadata_error)
+            resolution = "unknown"
+            aspect_ratio = "unknown"
 
         res_data = {
             "render_id": gen_id,
@@ -454,7 +451,11 @@ class ArchitecturalGenerator:
             "controlnet_strength": controlnet_strength,
             "denoising_strength": denoising_strength,
             "guidance_scale": guidance_scale,
-            "seed": used_seed if used_seed is not None else (seed if seed > 0 else -1),
+            # Only report a seed when the selected engine actually accepts it.
+            # HF, Fal, and the procedural Demo path ignore this request field.
+            "seed": used_seed if used_seed is not None else (
+                seed if target_provider == "replicate" and seed > 0 else -1
+            ),
             "prompt_profile": prompt_profile,
             "structure_conditioned": (target_provider in ("comfyui", "local", "replicate", "huggingface", "hf", "demo")) and not structure_lost,
             "resolution": resolution,
@@ -820,7 +821,7 @@ class ArchitecturalGenerator:
         save_path: str
     ):
         """
-        Procedural photorealistic synthesis engine:
+        Procedural preview engine:
         Used strictly for explicit Demo Simulation Mode.
         Takes the user's REAL uploaded sketch, uses the actual OpenCV extracted edge map
         for structural geometry, applies architectural material shaders, lighting atmosphere,

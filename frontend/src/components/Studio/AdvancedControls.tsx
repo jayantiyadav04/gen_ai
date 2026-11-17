@@ -9,7 +9,7 @@ interface AdvancedControlsProps {
   guidanceScale: number;
   onGuidanceScaleChange: (v: number) => void;
   seed: number;
-  isLocal?: boolean;
+  provider?: string;
   onSeedChange: (v: number) => void;
   resolution: string;
   onResolutionChange: (v: string) => void;
@@ -26,7 +26,7 @@ export const AdvancedControls: React.FC<AdvancedControlsProps> = ({
   guidanceScale,
   onGuidanceScaleChange,
   seed,
-  isLocal,
+  provider = 'comfyui',
   onSeedChange,
   resolution,
   onResolutionChange,
@@ -35,6 +35,12 @@ export const AdvancedControls: React.FC<AdvancedControlsProps> = ({
   promptMode = 'architecture',
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const isLocal = provider === 'comfyui' || provider === 'local';
+  const isDemo = provider === 'demo';
+  const supportsControlnet = !isDemo && provider !== 'fal' && provider !== 'fal_ai';
+  const supportsDenoising = provider === 'fal' || provider === 'fal_ai';
+  const supportsSeed = isLocal || provider === 'replicate';
+  const supportsPromptGuidance = !isDemo;
 
   return (
     <div className="bg-white rounded-xl border border-canvas-300 shadow-subtle overflow-hidden">
@@ -79,11 +85,16 @@ export const AdvancedControls: React.FC<AdvancedControlsProps> = ({
                 max="1.0"
                 step="0.05"
                 value={controlnetStrength}
+                disabled={!supportsControlnet}
                 onChange={(e) => onControlnetStrengthChange(parseFloat(e.target.value))}
-                className="w-full accent-arch-cyan cursor-pointer"
+                className={`w-full accent-arch-cyan ${supportsControlnet ? 'cursor-pointer' : 'opacity-40 cursor-not-allowed'}`}
               />
               <p className="text-[10px] text-slate-500">
-                Higher = stricter adherence to sketch lines; Lower = more creative freedom.
+                {supportsControlnet
+                  ? 'Higher = stricter adherence to sketch lines; lower = more creative freedom.'
+                  : provider === 'fal' || provider === 'fal_ai'
+                    ? 'Fal uses image-to-image strength instead of ControlNet.'
+                    : 'The procedural Demo engine does not use ControlNet strength.'}
               </p>
             </div>
 
@@ -103,16 +114,18 @@ export const AdvancedControls: React.FC<AdvancedControlsProps> = ({
                 max="0.95"
                 step="0.05"
                 value={denoisingStrength}
-                disabled={isLocal}
+                disabled={!supportsDenoising}
                 onChange={(e) => onDenoisingStrengthChange(parseFloat(e.target.value))}
-                className={`w-full accent-arch-cyan ${isLocal ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
+                className={`w-full accent-arch-cyan ${supportsDenoising ? 'cursor-pointer' : 'opacity-40 cursor-not-allowed'}`}
               />
               <p className="text-[10px] text-slate-500">
-                {isLocal
-                  ? 'Not used in local mode: the render always starts from the sketch edges.'
-                  : promptMode === 'custom'
+                {supportsDenoising
+                  ? promptMode === 'custom'
                     ? 'Amount of image transformation and new detail.'
-                    : 'Amount of architectural texture and realistic material synthesis.'}
+                    : 'Amount of image transformation and material synthesis.'
+                  : isLocal
+                    ? 'Not used in local mode; the ComfyUI workflow uses denoise 1.0.'
+                    : 'This provider does not accept a denoising strength.'}
               </p>
             </div>
 
@@ -132,11 +145,14 @@ export const AdvancedControls: React.FC<AdvancedControlsProps> = ({
                 max="15.0"
                 step="0.5"
                 value={guidanceScale}
+                disabled={!supportsPromptGuidance}
                 onChange={(e) => onGuidanceScaleChange(parseFloat(e.target.value))}
-                className="w-full accent-arch-cyan cursor-pointer"
+                className={`w-full accent-arch-cyan ${supportsPromptGuidance ? 'cursor-pointer' : 'opacity-40 cursor-not-allowed'}`}
               />
               <p className="text-[10px] text-slate-500">
-                Around 7 works well for Stable Diffusion 1.5. Much higher values look harsh.
+                {supportsPromptGuidance
+                  ? 'Around 7 works well for Stable Diffusion 1.5. Much higher values look harsh.'
+                  : 'The procedural Demo engine does not use prompt guidance.'}
               </p>
             </div>
           </div>
@@ -157,7 +173,7 @@ export const AdvancedControls: React.FC<AdvancedControlsProps> = ({
                   <button
                     key={res.val}
                     type="button"
-                    disabled={isLocal}
+                    disabled
                     onClick={() => onResolutionChange(res.val)}
                     className={`py-1.5 px-2 rounded text-[11px] font-mono border transition-all ${isLocal ? 'opacity-50 cursor-not-allowed ' : ''}${
                       resolution === res.val
@@ -169,11 +185,11 @@ export const AdvancedControls: React.FC<AdvancedControlsProps> = ({
                   </button>
                 ))}
               </div>
-              {isLocal && (
-                <p className="text-[10px] text-slate-500">
-                  Local mode matches Desktop: center-crop to 768×512, Canny 0.4/0.8, 25 Euler steps.
-                </p>
-              )}
+              <p className="text-[10px] text-slate-500">
+                {isLocal
+                  ? 'Local mode matches Desktop: fixed 768×512 output, Canny 0.4/0.8, and 25 Euler steps.'
+                  : 'The selected engine chooses output dimensions. The actual size is shown with the result.'}
+              </p>
             </div>
 
             {/* Seed */}
@@ -185,6 +201,7 @@ export const AdvancedControls: React.FC<AdvancedControlsProps> = ({
                 <button
                   type="button"
                   onClick={() => onSeedChange(-1)}
+                  disabled={!supportsSeed}
                   className="text-[10px] text-arch-cyan hover:underline flex items-center gap-1 font-mono"
                 >
                   <RefreshCw className="w-3 h-3" /> Randomize (-1)
@@ -193,12 +210,15 @@ export const AdvancedControls: React.FC<AdvancedControlsProps> = ({
               <input
                 type="number"
                 value={seed}
+                disabled={!supportsSeed}
                 onChange={(e) => onSeedChange(parseInt(e.target.value) || -1)}
                 placeholder="-1 for random generation"
-                className="w-full text-xs font-mono px-3 py-1.5 bg-canvas-50 border border-slate-200 rounded text-slate-800"
+                className={`w-full text-xs font-mono px-3 py-1.5 bg-canvas-50 border border-slate-200 rounded text-slate-800 ${supportsSeed ? '' : 'opacity-50 cursor-not-allowed'}`}
               />
               <p className="text-[10px] text-slate-500">
-                12345 matches the current ComfyUI Desktop workflow; use -1 to randomize.
+                {supportsSeed
+                  ? isLocal ? 'Use -1 to randomize; ComfyUI reports the random seed it actually used.' : 'Replicate receives a fixed seed; use -1 to let it choose randomly.'
+                  : 'This provider does not accept a reproducible seed.'}
               </p>
             </div>
           </div>

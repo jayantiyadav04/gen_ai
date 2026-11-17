@@ -249,6 +249,8 @@ export const ProjectsGallery: React.FC<ProjectsGalleryProps> = ({
           renderUrl={selectedForModal.render_url}
           edgeUrl={selectedForModal.edge_url}
           title={selectedForModal.title}
+          isDemo={selectedForModal.is_demo_mode}
+          localConditioning={selectedForModal.provider.toLowerCase().includes('comfyui')}
         />
       )}
     </div>
