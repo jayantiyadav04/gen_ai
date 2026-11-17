@@ -152,7 +152,15 @@ def get_projects(
     rows = cursor.fetchall()
     conn.close()
     
-    return [dict(row) for row in rows]
+    return [_project_from_row(row) for row in rows]
+
+
+def _project_from_row(row: sqlite3.Row) -> Dict[str, Any]:
+    project = dict(row)
+    for field in ("is_demo_mode", "is_favorite", "cache_hit"):
+        if field in project:
+            project[field] = bool(project[field])
+    return project
 
 def get_project(project_id: str) -> Optional[Dict[str, Any]]:
     conn = get_connection()
@@ -160,7 +168,7 @@ def get_project(project_id: str) -> Optional[Dict[str, Any]]:
     cursor.execute("SELECT * FROM projects WHERE id = ?", (project_id,))
     row = cursor.fetchone()
     conn.close()
-    return dict(row) if row else None
+    return _project_from_row(row) if row else None
 
 def delete_project(project_id: str) -> bool:
     conn = get_connection()

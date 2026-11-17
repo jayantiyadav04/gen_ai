@@ -4,7 +4,7 @@ import sys
 import time
 import logging
 from pathlib import Path
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Literal
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Query, BackgroundTasks
 from fastapi.responses import FileResponse
@@ -31,6 +31,7 @@ from backend.services.generator import ArchitecturalGenerator
 from backend.services.comfyui_client import ComfyUIClient
 from backend.services.gallery_data import init_sample_assets, EXAMPLES
 from backend.services.cache import global_cache
+from backend.services.provider_resolver import resolve_provider
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -83,8 +84,13 @@ app = FastAPI(
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+    ],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -146,7 +152,7 @@ class ConfigUpdateRequest(BaseModel):
     huggingface_api_key: Optional[str] = None
     replicate_api_token: Optional[str] = None
     fal_key: Optional[str] = None
-    default_provider: Optional[str] = None
+    default_provider: Optional[Literal["comfyui", "local", "replicate", "huggingface", "hf", "fal", "fal_ai", "demo", "auto"]] = None
 
 class TestProviderRequest(BaseModel):
     provider: str
@@ -168,31 +174,41 @@ def get_config():
     hf_key = get_setting("HUGGINGFACE_API_KEY") or settings.huggingface_api_key or os.getenv("HUGGINGFACE_API_KEY", "")
     replicate_token = get_setting("REPLICATE_API_TOKEN") or settings.replicate_api_token or os.getenv("REPLICATE_API_TOKEN", "")
     fal_key = get_setting("FAL_KEY") or settings.fal_key or os.getenv("FAL_KEY", "")
-    provider = get_setting("DEFAULT_PROVIDER") or settings.default_provider
+    provider = (get_setting("DEFAULT_PROVIDER") or settings.default_provider or "comfyui").lower().strip()
 
     has_replicate = bool(replicate_token and not replicate_token.strip().startswith("demo"))
     has_hf = bool(hf_key and not hf_key.strip().startswith("demo"))
     has_fal = bool(fal_key and not fal_key.strip().startswith("demo"))
-    has_live_key = has_replicate or has_hf or has_fal
+    effective_provider = resolve_provider(provider, has_replicate, has_hf, has_fal)
+    provider_labels = {
+        "comfyui": "Local ComfyUI (SD 1.5 + ControlNet Canny)",
+        "local": "Local ComfyUI (SD 1.5 + ControlNet Canny)",
+        "replicate": f"Replicate SDXL ControlNet ({settings.replicate_model})",
+        "huggingface": "Hugging Face Inference API",
+        "hf": "Hugging Face Inference API",
+        "fal": "Fal.ai Fast SDXL",
+        "fal_ai": "Fal.ai Fast SDXL",
+        "demo": "Demo Simulation Mode (Offline Procedural)",
+    }
 
     if provider == "demo":
         active_label = "Demo Simulation Mode (Offline Procedural)"
         is_demo = True
+    elif provider == "auto":
+        active_label = f"Auto → {provider_labels.get(effective_provider, effective_provider)}"
+        is_demo = False
     elif provider in ("comfyui", "local"):
-        active_label = "Local ComfyUI (SD 1.5 + ControlNet Canny)"
-        is_demo = False
-    elif has_replicate:
-        active_label = f"Replicate SDXL ControlNet ({settings.replicate_model})"
-        is_demo = False
-    elif has_hf:
-        active_label = "Hugging Face Inference API"
-        is_demo = False
-    elif has_fal:
-        active_label = "Fal.ai Fast SDXL"
+        active_label = provider_labels[provider]
         is_demo = False
     else:
-        active_label = "Demo Simulation Mode (Configure API Token in Settings for Cloud GPU)"
-        is_demo = True
+        active_label = provider_labels.get(provider, f"Unsupported provider: {provider}")
+        if provider == "replicate" and not has_replicate:
+            active_label += " (API token not configured)"
+        elif provider in ("huggingface", "hf") and not has_hf:
+            active_label += " (API key not configured)"
+        elif provider in ("fal", "fal_ai") and not has_fal:
+            active_label += " (API key not configured)"
+        is_demo = False
 
     return {
         "default_provider": provider,
@@ -201,7 +217,7 @@ def get_config():
         "has_fal_key": has_fal,
         "is_demo_mode": is_demo,
         "active_provider_label": active_label,
-        "prompt_profile": profile_for_provider("replicate" if (provider == "auto" and has_replicate) else provider),
+        "prompt_profile": profile_for_provider(effective_provider),
         "primary_model": settings.replicate_model,
         "primary_version": settings.replicate_version,
         "styles": list(ARCHITECTURAL_STYLES.keys()),
@@ -238,9 +254,15 @@ def _active_provider_name() -> str:
 @app.post("/api/build-prompt")
 def build_prompt_endpoint(req: BuildPromptRequest):
     provider = (req.provider or _active_provider_name()).lower().strip()
-    if provider == "auto":
-        provider = "replicate" if (get_setting("REPLICATE_API_TOKEN") or settings.replicate_api_token) else (
-            "huggingface" if (get_setting("HUGGINGFACE_API_KEY") or settings.huggingface_api_key) else "comfyui")
+    replicate_token = get_setting("REPLICATE_API_TOKEN") or settings.replicate_api_token
+    hf_key = get_setting("HUGGINGFACE_API_KEY") or settings.huggingface_api_key
+    fal_key = get_setting("FAL_KEY") or settings.fal_key
+    provider = resolve_provider(
+        provider,
+        bool(replicate_token and not replicate_token.strip().startswith("demo")),
+        bool(hf_key and not hf_key.strip().startswith("demo")),
+        bool(fal_key and not fal_key.strip().startswith("demo")),
+    )
     return PromptBuilder.build_prompt(
         user_prompt=req.user_prompt,
         style=req.style,
@@ -281,12 +303,28 @@ async def preprocess_sketch_endpoint(file: UploadFile = File(...)):
     Canny edge detection and blueprint visualization map.
     """
     try:
-        content = await file.read()
+        max_bytes = settings.max_upload_size_mb * 1024 * 1024
+        chunks = []
+        total_bytes = 0
+        while True:
+            chunk = await file.read(min(1024 * 1024, max_bytes - total_bytes + 1))
+            if not chunk:
+                break
+            total_bytes += len(chunk)
+            if total_bytes > max_bytes:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"File size exceeds maximum allowed size ({settings.max_upload_size_mb}MB)",
+                )
+            chunks.append(chunk)
+        content = b"".join(chunks)
         res = ImageProcessor.validate_and_save(content, file.filename or "sketch.png")
         return {
             "status": "success",
             **res
         }
+    except HTTPException:
+        raise
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
     except Exception as e:
@@ -413,7 +451,7 @@ def clear_cache():
 
 @app.get("/api/examples")
 def get_examples():
-    """Returns curated architectural example case studies with sketch and photoreal render URLs."""
+    """Returns sketch presets and URLs for their bundled procedural preview illustrations."""
     result = []
     for ex in EXAMPLES:
         result.append({
@@ -464,7 +502,12 @@ if FRONTEND_DIST.exists():
     def serve_frontend_spa(full_path: str):
         if full_path.split("/", 1)[0] in ("api", "uploads", "generated", "samples", "backend"):
             raise HTTPException(status_code=404, detail="Not found")
-        file_path = FRONTEND_DIST / full_path
+        frontend_root = FRONTEND_DIST.resolve()
+        file_path = (frontend_root / full_path).resolve()
+        try:
+            file_path.relative_to(frontend_root)
+        except ValueError:
+            raise HTTPException(status_code=404, detail="Not found")
         if file_path.is_file():
             return FileResponse(file_path)
-        return FileResponse(FRONTEND_DIST / "index.html")
+        return FileResponse(frontend_root / "index.html")

@@ -5,10 +5,12 @@ from pathlib import Path
 from typing import Tuple, Dict, Any, Optional, List
 import cv2
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageOps
 
 from backend.config import UPLOAD_DIR, settings
 from backend.services.cache import global_cache, CampusVisionCache
+
+MAX_IMAGE_PIXELS = 25_000_000
 
 # Officially trained SDXL Native Aspect-Ratio Buckets
 SDXL_ASPECT_RATIO_BUCKETS: List[Tuple[int, int, str, str]] = [
@@ -55,12 +57,25 @@ class ImageProcessor:
         try:
             from io import BytesIO
             img = Image.open(BytesIO(file_bytes))
+            if img.width * img.height > MAX_IMAGE_PIXELS:
+                raise ValueError(
+                    f"Image dimensions exceed the maximum allowed size ({MAX_IMAGE_PIXELS:,} pixels)"
+                )
             img.verify()
+        except ValueError:
+            raise
         except Exception as e:
             raise ValueError(f"Uploaded file is not a valid image: {str(e)}")
             
         # Re-open after verify()
-        img = Image.open(BytesIO(file_bytes)).convert("RGB")
+        img = ImageOps.exif_transpose(Image.open(BytesIO(file_bytes)))
+        if "A" in img.getbands() or "transparency" in img.info:
+            rgba = img.convert("RGBA")
+            normalized = Image.new("RGB", rgba.size, (255, 255, 255))
+            normalized.paste(rgba, mask=rgba.getchannel("A"))
+            img = normalized
+        else:
+            img = img.convert("RGB")
         
         file_id = str(uuid.uuid4())[:8]
         safe_name = f"{file_id}_sketch{ext}"

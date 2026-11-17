@@ -50,7 +50,7 @@ class Settings(BaseModel):
     replicate_api_token: str = os.getenv("REPLICATE_API_TOKEN", "")
     fal_key: str = os.getenv("FAL_KEY", "")
     
-    # Provider selection: 'replicate' | 'huggingface' | 'fal' | 'demo' | 'auto'
+    # Provider selection: 'comfyui' | 'replicate' | 'huggingface' | 'fal' | 'demo' | 'auto'
     default_provider: str = os.getenv("DEFAULT_PROVIDER") or os.getenv("AI_PROVIDER") or "comfyui"
     
     # Primary Replicate Model specification (SDXL ControlNet Canny)
