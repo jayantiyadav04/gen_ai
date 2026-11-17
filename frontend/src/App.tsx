@@ -75,7 +75,6 @@ export const App: React.FC = () => {
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
             onCreateCustom={() => openStudioWith({ promptMode: 'custom' })}
-            onOpenArchitecture={() => setIsArchitectureOpen(true)}
           />
         )}
 

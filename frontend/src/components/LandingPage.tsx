@@ -1,22 +1,18 @@
 import React from 'react';
 import { ViewTab } from '../types';
-import { ComparisonViewer } from './Comparison/ComparisonViewer';
 import { Sparkles, ArrowRight, ShieldCheck, CheckCircle2, Sun, Compass } from 'lucide-react';
 
 interface LandingPageProps {
   onNavigate: (tab: ViewTab) => void;
   onCreateCustom: () => void;
-  onOpenArchitecture: () => void;
 }
 
-export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate, onCreateCustom, onOpenArchitecture }) => {
+export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate, onCreateCustom }) => {
   return (
     <div className="space-y-16 sm:space-y-24 pb-16 animate-fade-in">
       {/* 1. Hero Section */}
       <section className="relative pt-8 sm:pt-16 pb-6 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
-          {/* Hero Left: Headline & Pitch */}
-          <div className="lg:col-span-6 space-y-6 text-left">
+        <div className="max-w-4xl mx-auto space-y-6 text-left">
             {/* Tag pill */}
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-xs font-mono font-semibold text-arch-blue">
               <span className="w-2 h-2 rounded-full bg-arch-cyan animate-pulse" />
@@ -66,35 +62,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate, onCreateCu
                 <span>Concept-Quality Renders</span>
               </div>
             </div>
-          </div>
-
-          {/* Hero Right: Interactive Before-After Slider */}
-          <div className="lg:col-span-6">
-            <div className="relative">
-              {/* Decorative architectural grid background */}
-              <div className="absolute -inset-4 bg-gradient-to-tr from-cyan-100/50 to-blue-100/40 rounded-2xl transform rotate-1 -z-10 blur-lg" />
-
-              <ComparisonViewer
-                originalUrl="/samples/sketches/academic_block_sketch.png"
-                renderUrl="/samples/renders/academic_block_render.png"
-                title="Modern Academic Complex (Drag slider to inspect transformation)"
-                aspectRatio="aspect-[4/3]"
-              />
-
-              <div className="mt-3 flex items-center justify-between text-xs text-slate-500 font-mono">
-                <span className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                  Interactive Split Slider Demo
-                </span>
-                <button
-                  onClick={onOpenArchitecture}
-                  className="text-arch-cyan hover:underline font-semibold"
-                >
-                  View AI Pipeline Diagram →
-                </button>
-              </div>
-            </div>
-          </div>
         </div>
       </section>
 
