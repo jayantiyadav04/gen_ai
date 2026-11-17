@@ -24,7 +24,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate, onCreateCu
             </h1>
 
             <p className="text-base sm:text-lg text-slate-600 leading-relaxed max-w-xl">
-              Turn architectural drawings into realistic concept renders, or draw any subject and guide image generation with your own positive and negative prompts. Sketch conditioning keeps the output connected to the lines you drew.
+              Turn architectural drawings into concept renders, or draw any subject and guide image generation with your own positive and negative prompts. Sketch conditioning can help the result follow your drawing; exact geometry is not guaranteed.
             </p>
 
             {/* CTAs */}
@@ -51,7 +51,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate, onCreateCu
             <div className="pt-4 flex flex-wrap items-center gap-4 text-xs font-mono text-slate-600">
               <div className="flex items-center gap-1.5">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                <span>Structural Elevation Preservation</span>
+                <span>Sketch-Guided Generation</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600" />
@@ -87,10 +87,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate, onCreateCu
                 <Compass className="w-5 h-5 text-arch-cyan" />
               </div>
               <h3 className="text-base font-bold text-navy-900 font-sans">
-                Preserve Original Geometry
+                Sketch-Guided Structure
               </h3>
               <p className="text-xs text-slate-600 leading-relaxed">
-                ControlNet conditioning locks in floor counts, column bays, and elevation contours from your original sketch without hallucinating impossible structures.
+                ControlNet can guide a diffusion model toward the sketch's contours and layout. The generated image may still change details or geometry.
               </p>
             </div>
 
@@ -102,7 +102,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate, onCreateCu
                 Authentic Campus Context
               </h3>
               <p className="text-xs text-slate-600 leading-relaxed">
-                Synthesizes realistic lighting (golden hour, blue hour, daylight) alongside manicured lawns, mature shade trees, pedestrian pathways, and natural student activity.
+                Prompts can describe lighting, landscaping, and campus context. The generated details depend on the selected engine and may vary from the prompt.
               </p>
             </div>
 
@@ -111,10 +111,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate, onCreateCu
                 <ShieldCheck className="w-5 h-5 text-emerald-600" />
               </div>
               <h3 className="text-base font-bold text-navy-900 font-sans">
-                Board & Donor Presentation Ready
+                Concept Images for Review
               </h3>
               <p className="text-xs text-slate-600 leading-relaxed">
-                Generate high-resolution visualizations suitable for university executive boards, capital campaign brochures, and architectural review committees.
+                Use generated images as early concepts for discussion. Resolution and image quality vary by engine; review and refine them before presentation or design decisions.
               </p>
             </div>
           </div>
@@ -158,8 +158,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate, onCreateCu
             {
               step: '04',
               title: 'Compare & Export',
-              desc: 'Inspect transformations with interactive split sliders, verify edge alignment, and export high-res renders.',
-              badge: 'Verification Suite',
+              desc: 'Compare the sketch and generated image, inspect the OpenCV edge preview, and download the result.',
+              badge: 'Comparison Suite',
             },
           ].map((item) => (
             <div

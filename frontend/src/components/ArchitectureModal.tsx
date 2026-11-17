@@ -14,7 +14,7 @@ export const ArchitectureModal: React.FC<ArchitectureModalProps> = ({ isOpen, on
       step: '01',
       title: 'User Uploads Architectural Sketch',
       subtitle: 'Input Acquisition & Sanitization',
-      desc: 'Architectural elevation, perspective, or masterplan sketch uploaded as PNG/JPG/WebP. Validated up to 20MB and dimension-normalized to optimal diffusion aspect ratios.',
+      desc: 'Architectural elevation, perspective, or masterplan sketch uploaded as PNG/JPG/WebP. Uploads are limited to 20MB and image dimensions are capped; preprocessing previews and engine input resizing can differ.',
       tech: 'FastAPI • Pydantic • PIL',
       color: 'border-slate-300 bg-white text-navy-900'
     },
@@ -22,7 +22,7 @@ export const ArchitectureModal: React.FC<ArchitectureModalProps> = ({ isOpen, on
       step: '02',
       title: 'OpenCV Preprocessing + Edge Detection',
       subtitle: 'Structural Feature Extraction',
-      desc: 'Bilateral filtering removes scanner noise and paper texture while sharpening structural lines. Canny edge detection extracts crisp geometric contours for ControlNet conditioning.',
+      desc: 'Bilateral filtering and Canny edge detection prepare a visual edge preview. Local ComfyUI runs its own Canny step; cloud engines use the conditioning method supported by that provider.',
       tech: 'OpenCV • Canny Alg • Bilateral Filter',
       color: 'border-blue-300 bg-blue-50/60 text-navy-900'
     },
@@ -30,15 +30,15 @@ export const ArchitectureModal: React.FC<ArchitectureModalProps> = ({ isOpen, on
       step: '03',
       title: 'ControlNet + Image-to-Image Diffusion',
       subtitle: 'Structural Guidance + Generative AI',
-      desc: 'Conditioning latents lock in building massing, column positions, floor heights and rooflines. Prompt compiler injects style materials, lighting, and landscape atmosphere without warping geometry.',
+      desc: 'When supported, ControlNet uses sketch edges to guide building massing and contours. The prompt compiler adds style, materials, lighting, and landscape details; generated geometry can still differ from the sketch.',
       tech: 'ControlNet Canny • Stable Diffusion 1.5 • Prompt Builder',
       color: 'border-cyan-300 bg-cyan-50/60 text-navy-900'
     },
     {
       step: '04',
-      title: 'Realistic Campus Render',
+      title: 'Campus Concept Image',
       subtitle: 'Materials & Lighting',
-      desc: 'The model adds glass, concrete and timber textures, the chosen lighting (golden hour, dusk, morning daylight) and campus greenery on top of the sketch outline.',
+      desc: 'The selected engine generates a concept image from the sketch and prompt. Materials, lighting, and other details vary by engine and may differ from the request.',
       tech: 'Local ComfyUI • 768 px output • Concept quality',
       color: 'border-indigo-300 bg-indigo-50/60 text-navy-900'
     },
@@ -46,7 +46,7 @@ export const ArchitectureModal: React.FC<ArchitectureModalProps> = ({ isOpen, on
       step: '05',
       title: 'Compare • Save • Download',
       subtitle: 'Interactive Evaluation Suite',
-      desc: 'Interactive split-slider before-and-after comparison, side-by-side mode, neon structural edge overlay verification, high-resolution export and persistent project gallery.',
+      desc: 'Interactive split-slider comparison, side-by-side mode, an OpenCV edge preview, image download, and a persistent project gallery.',
       tech: 'SQLite • Canvas Confetti • File Export',
       color: 'border-emerald-300 bg-emerald-50/60 text-navy-900'
     }
@@ -66,7 +66,7 @@ export const ArchitectureModal: React.FC<ArchitectureModalProps> = ({ isOpen, on
                 CampusVision AI Pipeline Architecture
               </h3>
               <p className="text-xs text-slate-500">
-                Official Image-to-Image structural conditioning workflow
+              Sketch-guided image generation workflow
               </p>
             </div>
           </div>
@@ -83,11 +83,10 @@ export const ArchitectureModal: React.FC<ArchitectureModalProps> = ({ isOpen, on
           <div className="bg-canvas-100/70 p-3.5 rounded-lg border border-canvas-300 text-xs text-slate-700 leading-relaxed">
             <p className="font-semibold text-navy-900 mb-1 flex items-center gap-1.5">
               <Sparkles className="w-3.5 h-3.5 text-arch-cyan" />
-              Core Innovation: Structural Preservation in Educational Architecture
+              Sketch Guidance for Educational Architecture
             </p>
-            Unlike naive text-to-image generators that invent random floor heights and warped orientations,
-            CampusVision AI integrates <strong>OpenCV structural feature extraction</strong> with <strong>ControlNet spatial conditioning</strong>.
-            This guarantees university planning committees receive visualizations faithful to original concept drawings.
+            CampusVision AI prepares an <strong>OpenCV edge preview</strong> and uses the selected engine's supported sketch conditioning method.
+            This can guide generated images toward a concept drawing, but does not guarantee faithful geometry or replace architectural review.
           </div>
 
           {/* Stepper Flow */}

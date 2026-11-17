@@ -24,7 +24,7 @@ EXAMPLES = [
         "controlnet_strength": 0.85,
         "denoising_strength": 0.70,
         "guidance_scale": 8.0,
-        "description": "Multi-tier academic pavilion transformed from pencil concept sketch to photorealistic morning visualization."
+        "description": "Procedural sample illustration of a multi-tier academic pavilion in morning light."
     },
     {
         "id": "ex-central-library",
@@ -40,7 +40,7 @@ EXAMPLES = [
         "controlnet_strength": 0.82,
         "denoising_strength": 0.72,
         "guidance_scale": 7.5,
-        "description": "Grand university library with soaring glazed atrium and warm wooden louvers in golden hour light."
+        "description": "Procedural sample illustration of a university library with a glazed atrium at golden hour."
     },
     {
         "id": "ex-biotech-hub",
@@ -56,7 +56,7 @@ EXAMPLES = [
         "controlnet_strength": 0.88,
         "denoising_strength": 0.68,
         "guidance_scale": 8.5,
-        "description": "LEED Platinum biophilic research hub with living green walls and solar canopy in bright daylight."
+        "description": "Procedural sample illustration of a biophilic research hub with green walls and a solar canopy."
     },
     {
         "id": "ex-auditorium",
@@ -72,7 +72,7 @@ EXAMPLES = [
         "controlnet_strength": 0.85,
         "denoising_strength": 0.75,
         "guidance_scale": 9.0,
-        "description": "Parametric convocation hall with fluid titanium canopy and glowing interior at blue hour dusk."
+        "description": "Procedural sample illustration of a convocation hall with a curved canopy at blue hour."
     },
     {
         "id": "ex-heritage-hall",
@@ -88,7 +88,7 @@ EXAMPLES = [
         "controlnet_strength": 0.80,
         "denoising_strength": 0.70,
         "guidance_scale": 7.5,
-        "description": "Collegiate heritage faculty building featuring carved sandstone arches and sunset warmth."
+        "description": "Procedural sample illustration of a heritage faculty building with sandstone arches at sunset."
     },
     {
         "id": "ex-sports-arena",
@@ -104,12 +104,12 @@ EXAMPLES = [
         "controlnet_strength": 0.84,
         "denoising_strength": 0.72,
         "guidance_scale": 8.0,
-        "description": "High-tech university athletic arena with sweeping tensile membrane canopy and landscaped grounds."
+        "description": "Procedural sample illustration of an athletic arena with a sweeping canopy and landscaped grounds."
     }
 ]
 
 def init_sample_assets():
-    """Generates human-grade architectural sketches and photorealistic renders for the example gallery."""
+    """Creates bundled procedural sketch and illustration files for the preset chooser."""
     sketch_dir = SAMPLES_DIR / "sketches"
     render_dir = SAMPLES_DIR / "renders"
     sketch_dir.mkdir(parents=True, exist_ok=True)
@@ -339,8 +339,7 @@ def _render_architectural_hand_sketch(path: str, ex: Dict[str, Any], w: int, h: 
 
 def _render_photorealistic_visualization(path: str, ex: Dict[str, Any], w: int, h: int):
     """
-    Renders a stunning, master-level architectural visualization adhering to the geometric structural layout,
-    complete with realistic lighting, glass reflections, materials, landscaping, and campus atmosphere.
+    Draws a procedural architectural preview using simplified geometry, colors, and landscaping.
     """
     lighting = ex["lighting"]
     category = ex["category"]

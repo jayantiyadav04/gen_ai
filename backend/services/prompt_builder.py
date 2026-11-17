@@ -172,7 +172,7 @@ PROFILE_RULES = {
              "tail": "photorealistic architectural photograph, realistic materials, sharp focus, high detail, 35mm lens",
              "subject": "professional architectural photograph of a {bldg}", "natural": False},
     "sdxl": {"max_words": 70,
-             "tail": "photorealistic architectural photograph, professional lighting, sharp focus, high detail, 8k",
+             "tail": "photorealistic architectural photograph, professional lighting, sharp focus, high detail",
              "subject": "professional architectural photograph of a {bldg}", "natural": True},
     "sdxl_img2img": {"max_words": 70,
                      "tail": "real photograph, photorealistic, realistic materials, sharp focus, high detail",

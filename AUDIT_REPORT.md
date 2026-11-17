@@ -1,3 +1,5 @@
+> **Historical report:** This audit is from November 16, 2026 and is superseded by [AUDIT_FINDINGS.md](AUDIT_FINDINGS.md), which audits the current checkout and records verified Phase 2 fixes. Several findings below no longer describe the current code.
+
 # AUDIT REPORT — CAMPUSVISION AI
 **Project:** CampusVision AI — Sketch-to-Photoreal Campus Renderer  
 **Domain:** Education Facility Design & Campus Planning (Team 5)  

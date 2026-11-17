@@ -1,4 +1,4 @@
-# CampusVision AI — Sketch-to-Photoreal Campus Renderer
+# CampusVision AI — Sketch-to-Image Campus Renderer
 
 > **University Generative AI Application**  
 > **Domain**: Education Facility Design & Campus Planning  
@@ -10,7 +10,7 @@
 
 CampusVision AI is a specialized Generative AI application engineered for university planners, educational architects, and campus development committees.
 
-Turning rough architectural sketches of new academic blocks, central libraries, laboratories, auditoriums, and campus masterplans into board-ready photorealistic visualizations traditionally requires manual 3D modeling and days of rendering time. CampusVision AI translates concept drawings into photorealistic campus visualizations in seconds while strictly preserving original elevations, column grids, and floor plates through **OpenCV edge extraction** and **ControlNet structural conditioning**.
+CampusVision AI turns architectural sketches into concept images using image-generation models and sketch conditioning. ControlNet can guide the result toward the sketch's lines, but it does not guarantee exact preservation of elevations, column grids, or floor plates. Output detail, size, and generation time depend on the selected engine; local ComfyUI runs can take a few minutes.
 
 ---
 
@@ -37,8 +37,8 @@ The application implements a genuine 5-phase image-to-image Generative AI pipeli
                        │
                        ▼
 ┌──────────────────────────────────────────────┐
-│          Photorealistic Campus Render        │
-│  (Photorealistic render from the selected engine)  │
+│         Concept Image from Selected Engine    │
+│  (Output detail and style vary by provider)   │
 └──────────────────────┬───────────────────────┘
                        │
                        ▼
@@ -100,7 +100,7 @@ For concurrent development with Vite HMR:
 ```bash
 # Terminal 1: Backend
 source venv/bin/activate
-uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
 
 # Terminal 2: Frontend
 cd frontend
@@ -111,7 +111,7 @@ Then open **[http://localhost:5173](http://localhost:5173)** in your browser.
 
 ---
 
-## 5. Automated Verification Test Suite
+## 5. Automated API Verification Suite
 
 To verify the complete backend, image processing pipeline, GenAI endpoints, and database persistence, run:
 
@@ -142,11 +142,11 @@ CampusVision AI supports several engines. Pick one in **Settings** (top-right pi
 3. Open Settings, choose **Local ComfyUI**, and press **Check ComfyUI connection**.
 4. Generate. A render takes about 1-3 minutes on a 16 GB MacBook; the first run is slower.
 
-Local renders use the same graph as the matching ComfyUI Desktop workflow: the original sketch is center-cropped to 768×512, passed through ComfyUI Canny (0.4 / 0.8), then sampled with 25 Euler / normal steps, CFG 7, and the selected ControlNet strength. The Studio starts with seed 12345 for repeatable comparison; set the seed to -1 to randomize. You can paste the exact positive prompt into **Manual Override** and edit the negative prompt in Advanced Controls.
+The app's local graph is configured to center-crop the original sketch to 768×512, run ComfyUI Canny (0.4 / 0.8), then sample with 25 Euler / normal steps, CFG 7, and the selected ControlNet strength. Check the graph in your installed ComfyUI Desktop version before relying on exact workflow parity. The Studio starts with seed 12345 for repeatable comparison; set the seed to -1 to randomize. You can paste the positive prompt into **Manual Override** and edit the negative prompt in Advanced Controls.
 
 The prompt builder now uses photo-first wording for local SD 1.5. The project still shows the OpenCV edge preview, while the local ComfyUI render uses the matching Canny node directly on the original sketch.
 
-**Cloud providers (optional):** enter a Hugging Face or Replicate token in Settings and select that engine.
+**Cloud providers (optional):** enter a Replicate, Hugging Face, or Fal.ai key in Settings and select that engine. Their model capabilities and sketch-conditioning behavior differ.
 
 **Demo mode:** an offline procedural simulation for exploring the interface without any AI model.
 
@@ -158,7 +158,7 @@ The prompt compiler (`backend/services/prompt_builder.py`) builds a different pr
 
 | Engine | Profile | Prompt style |
 |---|---|---|
-| Local ComfyUI | `sd15` | Short comma-separated tags, about 50 words (CLIP only reads ~75 tokens) |
+| Local ComfyUI | `sd15` | Short comma-separated tags, roughly 50 words; this is a word-count heuristic, not CLIP-token measurement |
 | Replicate / Hugging Face | `sdxl` | Richer descriptive phrases, about 70 words, photograph-style tail, extra negatives |
 | Fal.ai | `sdxl_img2img` | Photo-first wording and strong "not a drawing" negatives, because the raw sketch is the init image |
 | Demo | `demo` | Shown for reference only |
@@ -176,17 +176,18 @@ Clicking a preloaded benchmark sketch in the Studio loads its style, building ty
 - **Architectural Typologies**: University Academic Block, School Building, Central Library, Grand Auditorium, Research Laboratory, Sports Complex, Student Hostel, Campus Masterplan.
 - **Architectural Styles**: Modern Minimalist, Contemporary, Neo-Classical, Sustainable / Green Biophilic, Futuristic Parametric, Traditional Indian Heritage (Indo-Saracenic), Institutional Brutalist.
 - **Lighting & Atmosphere**: Crisp Morning, Golden Hour, Bright Daylight, Sunset, Evening Blue Hour, Night Illumination.
-- **Interactive Verification Suite**:
+- **Interactive Comparison Suite**:
   - Draggable Before-and-After split comparison slider
   - Side-by-side comparative inspection
-  - Structural Edge Overlay mode (superimposes OpenCV Canny lines over the render in blueprint cyan)
+  - Edge preview mode (superimposes OpenCV Canny lines over the render in blueprint cyan)
   - Fullscreen zoom and pan modal
-- **Curated Case Studies**: 6 pre-loaded benchmark sketches that configure the Studio with one click. The example "renders" in the gallery are procedural illustrations, not AI output; generate with a real engine for photorealistic results.
+- **Preloaded Sketch Presets**: 6 sketches that configure the Studio with one click. Bundled sample render images and Demo results are procedural illustrations. Diffusion engines can produce more detailed concept images, but the result depends on the selected model and is not a construction-ready visualization.
 
 ## 8. Tests
 
 ```
-./venv/bin/python backend/test_suite.py                  # 9 end-to-end API tests
-./venv/bin/python backend/test_prompts_and_samples.py    # per-model prompts, preloaded-sample flow, overrides
+./venv/bin/python backend/test_suite.py                  # 9 in-process API checks; success generation uses Demo
+./venv/bin/python backend/test_prompts_and_samples.py    # prompt, sample-flow, and regression checks
+DEFAULT_PROVIDER=demo ./venv/bin/python backend/audit_test_runner.py  # 8 in-process Demo scenarios
 ```
 

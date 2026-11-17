@@ -43,7 +43,7 @@ def run_all_tests():
         print(f"    • {ex['title']} ({ex['category']} / {ex['style']})")
         assert Path("backend" + ex['sketch_url']).exists()
         assert Path("backend" + ex['render_url']).exists()
-    print("  ✓ All example sketches and photoreal renders verified on disk.")
+    print("  ✓ All example sketches and procedural preview illustrations verified on disk.")
     
     # 4. Prompt compiler check
     print("\n[4/9] Testing POST /api/build-prompt ...")

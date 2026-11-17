@@ -23,8 +23,8 @@ export const Footer: React.FC<FooterProps> = ({ onOpenArchitecture, onOpenSettin
             </div>
             <p className="text-xs text-slate-600 max-w-md leading-relaxed">
               University Generative AI Research & Architectural Visualization Engine.
-              Sketch-guided image generation for architecture and custom subjects
-              with sketch-to-render diffusion guided by ControlNet.
+              Sketch-guided image generation for architecture and custom subjects.
+              Conditioning methods depend on the selected engine.
             </p>
             <div className="flex items-center gap-3 text-xs text-slate-500 font-mono">
               <span className="inline-flex items-center gap-1">
@@ -95,7 +95,7 @@ export const Footer: React.FC<FooterProps> = ({ onOpenArchitecture, onOpenSettin
           <p>© 2026 CampusVision AI • University Generative AI Project</p>
           <div className="flex items-center gap-4">
             <span className="flex items-center gap-1 text-slate-600">
-              <Shield className="w-3.5 h-3.5 text-emerald-600" /> Sandboxed Local & Cloud Inference
+              <Shield className="w-3.5 h-3.5 text-emerald-600" /> Local or Cloud Processing
             </span>
           </div>
         </div>
